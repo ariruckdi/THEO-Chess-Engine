@@ -391,15 +391,15 @@ public class GameMngr : MonoBehaviour
         if (piece != 1)
         {
             spaceHandler.UnHighlightAll();
-            List<int> possibleMoves = moveGenerator.GetPossibleSpacesForPiece(3 + 3 * 8).GetActive();
+            var possibleMoves = moveGenerator.GetPossibleSpacesForPiece(3 + 3 * 8).GetActive();
             spaceHandler.HighlightSpaceList(possibleMoves, Color.cyan, 0.5f);
             spaceHandler.HighlightSpace(27, Color.green, 0.5f);
         }
         else
         {
             spaceHandler.UnHighlightAll();
-            List<int> possibleMoves1 = moveGenerator.GetPossibleSpacesForPiece(3 + 1 * 8).GetActive();
-            List<int> possibleMoves2 = moveGenerator.GetPossibleSpacesForPiece(6 + 5 * 8).GetActive();
+            var possibleMoves1 = moveGenerator.GetPossibleSpacesForPiece(3 + 1 * 8).GetActive();
+            var possibleMoves2 = moveGenerator.GetPossibleSpacesForPiece(6 + 5 * 8).GetActive();
             spaceHandler.HighlightSpaceList(possibleMoves1, Color.cyan, 0.5f);
             spaceHandler.HighlightSpaceList(possibleMoves2, Color.magenta, 0.5f);
             spaceHandler.HighlightSpace(11, Color.green, 0.5f);

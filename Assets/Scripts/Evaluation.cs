@@ -57,6 +57,7 @@ public class Evaluation
         {
             foreach (int space in moveGenerator.board.FindPieces(piece))
             {
+                if (space == -1) break;
                 int colorSign = ChessBoard.PieceColor(piece) == ChessBoard.black ? -1 : 1;
                 int spaceValue = PieceBonusTable.Read(piece, space, endgame);
                 output += spaceValue * colorSign;

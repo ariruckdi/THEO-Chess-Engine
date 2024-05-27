@@ -100,6 +100,7 @@ public class Engine
             {
                 foreach (int endSpace in moveGenerator.GetLegalMovesForPiece(space).GetActive())
                 {
+                    if (endSpace == -1) break;
                     output.Add(new EngineMove(currentPiece, space, endSpace));
                 }
             }
@@ -119,6 +120,7 @@ public class Engine
                 if ((ulong)pieceMoveset == 0ul) continue; //skip pieces without moves
                 foreach (int endSpace in pieceMoveset.GetActive())
                 {
+                    if (endSpace == -1) break;
                     EngineMove newMove = new EngineMove(currentPiece, space, endSpace);
                     newMove.Eval = evaluator.EvaluateMove(newMove);
                     moves.Add(newMove);
@@ -141,6 +143,7 @@ public class Engine
                 if ((ulong)pieceCaptures == 0ul) continue; // skips pieces without availble captures
                 foreach (int endSpace in pieceCaptures.GetActive())
                 {
+                    if (endSpace == -1) break;
                     EngineMove nextMove = new EngineMove(currentPiece, space, endSpace);
                     nextMove.Eval = evaluator.EvaluateMove(nextMove);
                     output.Add(new EngineMove(currentPiece, space, endSpace));

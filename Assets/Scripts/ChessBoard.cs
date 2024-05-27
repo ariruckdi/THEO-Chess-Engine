@@ -1,8 +1,25 @@
 using System.Collections.Generic;
 using System;
+using System.Runtime.Serialization;
+using System.ComponentModel;
+using System.Xml;
+using Unity.Collections;
+using System.Diagnostics;
 
 public class BitBoard
 {
+    static readonly int[] LSB_TABLE = {
+        63, 30,  3, 32, 59, 14, 11, 33,
+        60, 24, 50,  9, 55, 19, 21, 34,
+        61, 29,  2, 53, 51, 23, 41, 18,
+        56, 28,  1, 43, 46, 27,  0, 35,
+        62, 31, 58,  4,  5, 49, 54,  6,
+        15, 52, 12, 40,  7, 42, 45, 16,
+        25, 57, 48, 13, 10, 39,  8, 44,
+        20, 47, 38, 22, 17, 37, 36, 26
+    };
+
+
     //core
     ulong boardInt;
 
@@ -60,7 +77,7 @@ public class BitBoard
     {
         if (input)
         {
-            boardInt |= ((ulong)1 << index);
+            boardInt |= (ulong)1 << index;
         }
         else
         {
@@ -87,24 +104,78 @@ public class BitBoard
     }
 
     //methods, higher level stuff
-    public int CountActive() // SLOW: Dont loop over the entire board
+    public int CountActive()
     {
+        ulong currentInt = boardInt;
         int count = 0;
-        for (int i = 0; i < 64; i++)
-        {
-            count += (int)(boardInt >> i) & 0b1;
+        while (currentInt != 0) {
+            currentInt ^= (ulong)1 << TrailingZeroCount(currentInt);
+            count++;
         }
         return count;
     }
 
-    public List<int> GetActive() // SLOW: There are way faster algos for that
+    public static int TrailingZeroCount(ulong bitBoardInt)
     {
-        var output = new List<int>();
+        uint folded;
+        if (bitBoardInt == 0) return 64;
+        ulong xorDecrement = bitBoardInt ^ (bitBoardInt - 1);
+        folded = (uint)(xorDecrement ^ (xorDecrement >> 32));
+        return LSB_TABLE[(folded * 0x78291ACF) >> 26];
+    }
+
+    public int TrailingZeroCount()
+    {
+        uint folded;
+        if (boardInt == 0) return 64;
+        ulong xorDecrement = boardInt ^ (boardInt - 1);
+        folded = (uint)(xorDecrement ^ (xorDecrement >> 32));
+        return LSB_TABLE[(folded * 0x78291ACF) >> 26];
+    }
+
+    public int[] GetActive()
+    {
+        var output = new int[64] {-1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1};
         ulong currentInt = boardInt;
+        int arrayIndex = 0;
+        int nextActiveSpace;
+        while (currentInt != 0) {
+            nextActiveSpace = TrailingZeroCount(currentInt);
+            output[arrayIndex] = nextActiveSpace;
+            arrayIndex++;
+            currentInt ^= (ulong)1 << nextActiveSpace;
+        }
+        return output;
+    }
+
+    public int[] GetActiveSlow() // SLOW: There are way faster algos for that
+    {
+        var output = new int[64] {-1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1,
+                                  -1, -1, -1, -1, -1, -1, -1, -1};
+        ulong currentInt = boardInt;
+        int arrayIndex = 0;
         for (int i = 0; i < 64; i++)
         {
+
             if (currentInt == 0) break;
-            if ((currentInt & 1) == 1) output.Add(i);
+            if ((currentInt & 1) == 1)
+            {
+                output[arrayIndex] = i;
+                arrayIndex++;
+            }
             currentInt >>= 1;
         }
         return output;
@@ -128,7 +199,7 @@ class ZobristHashing
 
     ulong LookUpPiece(int space, int piece)
     {
-        int index = (((piece & 0b111) - 1) + (6 * (piece >> 4))) * space; //piece type and piece color create an index from 0 to 11, which is then multiplied with space
+        int index = ((piece & 0b111) - 1 + (6 * (piece >> 4))) * space; //piece type and piece color create an index from 0 to 11, which is then multiplied with space
         return keys[index];
     }
 
@@ -153,6 +224,7 @@ class ZobristHashing
         ulong result = 0;
         foreach (int space in input.fullSpaces.GetActive())
         {
+            if (space == -1) break;
             result ^= LookUpPiece(space, input[space]);
         }
         result ^= LookUpColor(player);
@@ -250,7 +322,6 @@ public class ChessBoard
     void SetPieceAtPos(int position, int piece)
     {
         int prevPiece = GetPieceAtPos(position);
-        if (piece == prevPiece) return; //piece is already there
         if (prevPiece != 0) piecePositionBoards[BitBoardIndex(prevPiece)][position] = false;
         if (piece != 0) piecePositionBoards[BitBoardIndex(piece)][position] = true;
 
@@ -381,15 +452,17 @@ public class ChessBoard
         return piecePositionBoards[BitBoardIndex(piece)][space];
     }
 
-    public List<int> FindPieces(int piece) //returns list of spaces where the piece is
+    public int[] FindPieces(int piece) //returns list of spaces where the piece is
     {
-        var output = new List<int>();
         int index = BitBoardIndex(piece);
-        for (int i = 0; i < 64; i++)
-        {
-            if (piecePositionBoards[index][i]) output.Add(i);
-        }
-        return output;
+        return piecePositionBoards[index].GetActive();
+    }
+
+    public int WhiteKingPosition() {
+        return piecePositionBoards[BitBoardIndex(whitePiece | king)].TrailingZeroCount();
+    }
+    public int BlackKingPosition() {
+        return piecePositionBoards[BitBoardIndex(blackPiece | king)].TrailingZeroCount();
     }
 
     public BitBoard PieceSpacesOfColor(int color)
@@ -399,7 +472,7 @@ public class ChessBoard
         else throw new System.ArgumentException("Invalid value for argument color. Use 0 (white) or 1 (black)");
     }
 
-    public List<int> FindPiecesOfColor(int color)
+    public int[] FindPiecesOfColor(int color)
     {
         return PieceSpacesOfColor(color).GetActive();
     }
@@ -417,8 +490,6 @@ public class ChessBoard
 
     public void MovePieceToEmptySpace(int start, int end, int piece)
     {
-        if (piece == 0) return;
-
         piecePositionBoards[BitBoardIndex(piece)][start] = false;
         piecePositionBoards[BitBoardIndex(piece)][end] = true;
 
@@ -430,8 +501,6 @@ public class ChessBoard
 
     public void MovePieceToFullSpace(int start, int end, int piece, int takenPiece)
     {
-        if (piece == 0) return;
-
         if (takenPiece == 0)
         {
             MovePieceToEmptySpace(start, end, piece);

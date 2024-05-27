@@ -24,7 +24,7 @@ public class PieceHandler : MonoBehaviour
     //drag and drop
     GameObject selectedPiece;
     Vector3 transformDelta;
-    List<int> possibleMovesForClickedPiece;
+    int[] possibleMovesForClickedPiece;
     bool inDrag;
 
     //piece moving
@@ -179,7 +179,7 @@ public class PieceHandler : MonoBehaviour
     }
 
     //drag and drop functionality
-    int SnapToSpace(GameObject piece, int startSpace, List<int> possibleSpaces)
+    int SnapToSpace(GameObject piece, int startSpace, int[] possibleSpaces)
     {
         int space = spaceHandler.WorldSpaceToChessSpace(piece.transform.position);
         //resetting the piece in case of an invalid move
