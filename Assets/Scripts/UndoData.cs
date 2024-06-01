@@ -35,20 +35,20 @@ public struct UndoMoveData
         this.castlingBefore = (bool[])moveGenerator.gameData.castling.Clone();
         this.epSpaceBefore = moveGenerator.gameData.epSpace;
         castlingIndex = -1;
-        if ((SpaceY(end) == 0 || SpaceY(end) == 7) && PieceType(movedPiece) == pawn)
+        if ((SpaceY(end) == 0 || SpaceY(end) == 7) && PieceType(movedPiece) == PAWN)
         { // kinda slow but gets mostly skipped
             wasPromotion = true;
-            movedPiece = PieceInt(queen, PieceColor(movedPiece));
+            movedPiece = PieceInt(QUEEN, PieceColor(movedPiece));
         }
         else
         {
             wasPromotion = false;
         }
-        if (PieceType(movedPiece) == king && Mathf.Abs(start - end) == 2)
+        if (PieceType(movedPiece) == KING && Mathf.Abs(start - end) == 2)
         { // castling
             for (int i = 0; i < 4; i++)
             {
-                if (kingsAfter[i] == end)
+                if (KINGS_AFTER_CASTLING[i] == end)
                 {
                     castlingIndex = i;
                 }

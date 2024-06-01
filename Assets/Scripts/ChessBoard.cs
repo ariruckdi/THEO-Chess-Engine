@@ -6,7 +6,7 @@ using System.Xml;
 using Unity.Collections;
 using System.Diagnostics;
 
-public class BitBoard
+public struct BitBoard
 {
     static readonly int[] LSB_TABLE = {
         63, 30,  3, 32, 59, 14, 11, 33,
@@ -19,6 +19,11 @@ public class BitBoard
         20, 47, 38, 22, 17, 37, 36, 26
     };
 
+    public static readonly BitBoard[] FILES = {(BitBoard)0x0101010101010101, (BitBoard)0x0202020202020202, (BitBoard)0x0404040404040404, (BitBoard)0x0808080808080808, 
+                                        (BitBoard)0x1010101010101010, (BitBoard)0x2020202020202020, (BitBoard)0x4040404040404040, (BitBoard)0x8080808080808080};
+
+    public static readonly BitBoard[] RANKS = {(BitBoard)0x00000000000000ff, (BitBoard)0x000000000000ff00, (BitBoard)0x0000000000ff0000, (BitBoard)0x00000000ff000000, 
+                                        (BitBoard)0x000000ff00000000, (BitBoard)0x0000ff0000000000, (BitBoard)0x00ff000000000000, (BitBoard)0xff00000000000000};
 
     //core
     ulong boardInt;
@@ -45,6 +50,16 @@ public class BitBoard
         return new BitBoard(~input.boardInt);
     }
 
+    public static BitBoard operator >>(BitBoard input, int shift)
+    {
+        return new BitBoard(input.boardInt >> shift);
+    }
+
+    public static BitBoard operator <<(BitBoard input, int shift)
+    {
+        return new BitBoard(input.boardInt << shift);
+    }
+
     public static explicit operator BitBoard(ulong input)
     {
         return new BitBoard(input);
@@ -55,10 +70,31 @@ public class BitBoard
         return input.boardInt;
     }
 
-    public bool Equals(BitBoard otherBoard)
+    public static bool operator ==(BitBoard left, BitBoard right)
     {
-        if (boardInt == otherBoard.boardInt) return true;
+        if (left.boardInt == right.boardInt) return true;
         else return false;
+    }
+
+    public static bool operator !=(BitBoard left, BitBoard right)
+    {
+        if (left.boardInt == right.boardInt) return false;
+        else return true;
+    }
+
+    public override bool Equals(object other)
+    {
+        return other is BitBoard && this.Equals(other);
+    }
+
+    public bool Equals(BitBoard other)
+    {
+        return this.boardInt == other.boardInt;
+    }
+
+    public override int GetHashCode()
+    {
+        return boardInt.GetHashCode();
     }
 
     //getting and setting
@@ -85,6 +121,57 @@ public class BitBoard
         }
     }
 
+    public static BitBoard FromIndex(int index)
+    {
+        return (BitBoard)1 << index;
+    }
+
+    public bool IsEmpty()
+    {
+        return boardInt == 0;
+    }
+
+    //shifting, useful for movegen
+    public static BitBoard ShiftSouth(BitBoard input)
+    {
+        return input >> 8;
+    }
+    
+    public static BitBoard ShiftNorth(BitBoard input)
+    {
+        return input << 8;
+    }
+
+    public static BitBoard ShiftSouthDouble(BitBoard input)
+    {
+        return input >> 16;
+    }
+
+    public static BitBoard ShiftNorthDouble(BitBoard input)
+    {
+        return input << 16;
+    }
+
+    public static BitBoard ShiftSouthEast(BitBoard input)
+    {
+        return (input & ~FILES[7]) >> 7;
+    }
+
+    public static BitBoard ShiftSouthWest(BitBoard input)
+    {
+        return (input & ~FILES[0]) >> 9;
+    }
+
+    public static BitBoard ShiftNorthEast(BitBoard input)
+    {
+        return (input & ~FILES[7]) << 9;
+    }
+
+    public static BitBoard ShiftNorthWest(BitBoard input)
+    {
+        return (input & ~FILES[0]) << 7;
+    }
+
     //converters
     public override string ToString()
     {
@@ -96,11 +183,6 @@ public class BitBoard
             partArray[i] = currentPart;
         }
         return string.Join("\n", partArray);
-    }
-
-    public override int GetHashCode() //this is a bit shitty but oh well...
-    {
-        return (int)boardInt;
     }
 
     //methods, higher level stuff
@@ -222,7 +304,7 @@ class ZobristHashing
     public ulong Hash(ChessBoard input, int player, bool[] castling, int epSpace)
     {
         ulong result = 0;
-        foreach (int space in input.fullSpaces.GetActive())
+        foreach (int space in input.occupied.GetActive())
         {
             if (space == -1) break;
             result ^= LookUpPiece(space, input[space]);
@@ -240,31 +322,31 @@ class ZobristHashing
 public class ChessBoard
 {
     //constants
-    public const int pawn = 1, knight = 2, bishop = 3, rook = 4, queen = 5, king = 6;
-    public const int whitePiece = 8, blackPiece = 16;
-    public const int white = 0, black = 1;
-    public static readonly int[] possiblePieces = new int[]
+    public const int PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+    public const int WHITE_PIECE = 8, BLACK_PIECE = 16;
+    public const int WHITE = 0, BLACK = 1;
+    public static readonly int[] POSSIBLE_PIECES = new int[]
     {
-        pawn | whitePiece, knight | whitePiece, bishop | whitePiece, rook | whitePiece, queen | whitePiece, king | whitePiece,
-        pawn | blackPiece, knight | blackPiece, bishop | blackPiece, rook | blackPiece, queen | blackPiece, king | blackPiece
+        PAWN | WHITE_PIECE, KNIGHT | WHITE_PIECE, BISHOP | WHITE_PIECE, ROOK | WHITE_PIECE, QUEEN | WHITE_PIECE, KING | WHITE_PIECE,
+        PAWN | BLACK_PIECE, KNIGHT | BLACK_PIECE, BISHOP | BLACK_PIECE, ROOK | BLACK_PIECE, QUEEN | BLACK_PIECE, KING | BLACK_PIECE
     };
-    public static readonly char[] pieceNames = new char[] { ' ', 'N', 'B', 'R', 'Q', 'K' };
-    public static readonly char[] fileLetters = new char[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
-    public static readonly char[] rankNumbers = new char[] { '1', '2', '3', '4', '5', '6', '7', '8' };
+    public static readonly char[] PIECE_NAMES = new char[] { ' ', 'N', 'B', 'R', 'Q', 'K' };
+    public static readonly char[] FILE_LETTERS = new char[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
+    public static readonly char[] RANK_NUMBERS = new char[] { '1', '2', '3', '4', '5', '6', '7', '8' };
 
-    public static readonly BitBoard whiteSpaces = (BitBoard)0b10101010_01010101_10101010_01010101_10101010_01010101_10101010_01010101;
+    public static readonly BitBoard WHITE_SPACES = (BitBoard)0b10101010_01010101_10101010_01010101_10101010_01010101_10101010_01010101;
 
     //core
     public BitBoard[] piecePositionBoards; //white pawns, white knights, white bishops, white rooks, white queens, white kings, after that same for black
-    public BitBoard fullSpaces; // Every PiecePosBoard added together
+    public BitBoard occupied; // Every PiecePosBoard added together
     public BitBoard colorMask; // All black pieces
 
     //castling data 
     //short white, long white, short black, short white
-    public static readonly int[] rooksBefore = new int[] { 7, 0, 63, 56 };
-    public static readonly int[] kingsBefore = new int[] { 4, 4, 60, 60 };
-    public static readonly int[] rooksAfter = new int[] { 5, 3, 61, 59 };
-    public static readonly int[] kingsAfter = new int[] { 6, 2, 62, 58 };
+    public static readonly int[] ROOKS_BEFORE_CASTLING = new int[] { 7, 0, 63, 56 };
+    public static readonly int[] KINGS_BEFORE_CASTLING = new int[] { 4, 4, 60, 60 };
+    public static readonly int[] ROOKS_AFTER_CASTLING = new int[] { 5, 3, 61, 59 };
+    public static readonly int[] KINGS_AFTER_CASTLING = new int[] { 6, 2, 62, 58 };
 
 
 
@@ -272,7 +354,7 @@ public class ChessBoard
     public ChessBoard()
     {
         piecePositionBoards = new BitBoard[12];
-        fullSpaces = new BitBoard();
+        occupied = new BitBoard();
         colorMask = new BitBoard();
         for (int i = 0; i < 12; i++)
         {
@@ -301,7 +383,7 @@ public class ChessBoard
 
     int GetPieceAtPos(int position)
     {
-        if (!fullSpaces[position])
+        if (!occupied[position])
         {
             return 0;
         }
@@ -309,11 +391,11 @@ public class ChessBoard
         {
             if (piecePositionBoards[i][position])
             {
-                return i + 1 + whitePiece;
+                return i + 1 + WHITE_PIECE;
             }
             else if (piecePositionBoards[i + 6][position])
             {
-                return i + 1 + blackPiece;
+                return i + 1 + BLACK_PIECE;
             }
         }
         throw new IndexOutOfRangeException("Full spaces are not updated correctly or there is a beer bottle on the board.");
@@ -325,7 +407,7 @@ public class ChessBoard
         if (prevPiece != 0) piecePositionBoards[BitBoardIndex(prevPiece)][position] = false;
         if (piece != 0) piecePositionBoards[BitBoardIndex(piece)][position] = true;
 
-        fullSpaces[position] = (piece != 0);
+        occupied[position] = (piece != 0);
         colorMask[position] = (piece >> 4) == 1;
     }
 
@@ -368,7 +450,7 @@ public class ChessBoard
 
     public static int SpaceColor(int space)
     {
-        return whiteSpaces[space] ? white : black;
+        return WHITE_SPACES[space] ? WHITE : BLACK;
     }
 
     public static int SpaceX(int space)
@@ -394,7 +476,7 @@ public class ChessBoard
     {
         int x = SpaceX(space);
         int y = SpaceY(space);
-        return fileLetters[x].ToString() + rankNumbers[y].ToString();
+        return FILE_LETTERS[x].ToString() + RANK_NUMBERS[y].ToString();
     }
 
     public static int SpaceNumberFromString(string spaceName)
@@ -402,11 +484,11 @@ public class ChessBoard
         int x = 0, y = 0;
         for (int i = 0; i < 8; i++)
         {
-            if (fileLetters[i] == spaceName[0])
+            if (FILE_LETTERS[i] == spaceName[0])
             {
                 x = i;
             }
-            if (rankNumbers[i] == spaceName[1])
+            if (RANK_NUMBERS[i] == spaceName[1])
             {
                 y = i;
             }
@@ -416,10 +498,25 @@ public class ChessBoard
 
     public static char PieceLetter(int piece)
     {
-        return pieceNames[PieceType(piece) - 1];
+        return PIECE_NAMES[PieceType(piece) - 1];
     }
 
     //non static getters, mostly used for eval
+    public BitBoard WhiteOccupied() 
+    {
+        return occupied & ~colorMask;
+    }
+
+    public BitBoard BlackOccupied()
+    {
+        return occupied & colorMask;
+    }
+
+    public BitBoard ColorOccupied(int color)
+    {
+        return (color == WHITE) ? WhiteOccupied() : BlackOccupied();
+    }
+
     public int PieceCount(int piece)
     {
         int index = BitBoardIndex(piece);
@@ -459,22 +556,15 @@ public class ChessBoard
     }
 
     public int WhiteKingPosition() {
-        return piecePositionBoards[BitBoardIndex(whitePiece | king)].TrailingZeroCount();
+        return piecePositionBoards[BitBoardIndex(WHITE_PIECE | KING)].TrailingZeroCount();
     }
     public int BlackKingPosition() {
-        return piecePositionBoards[BitBoardIndex(blackPiece | king)].TrailingZeroCount();
-    }
-
-    public BitBoard PieceSpacesOfColor(int color)
-    {
-        if (color == black) return colorMask & fullSpaces;
-        else if (color == white) return ~colorMask & fullSpaces;
-        else throw new System.ArgumentException("Invalid value for argument color. Use 0 (white) or 1 (black)");
+        return piecePositionBoards[BitBoardIndex(BLACK_PIECE | KING)].TrailingZeroCount();
     }
 
     public int[] FindPiecesOfColor(int color)
     {
-        return PieceSpacesOfColor(color).GetActive();
+        return ColorOccupied(color).GetActive();
     }
 
     //methods to make moving and undoing faster 
@@ -484,7 +574,7 @@ public class ChessBoard
         
         piecePositionBoards[BitBoardIndex(piece)][position] = true;
 
-        fullSpaces[position] = true;
+        occupied[position] = true;
         colorMask[position] = (piece >> 4) == 1;
     }
 
@@ -493,45 +583,39 @@ public class ChessBoard
         piecePositionBoards[BitBoardIndex(piece)][start] = false;
         piecePositionBoards[BitBoardIndex(piece)][end] = true;
 
-        fullSpaces[start] = false;
+        occupied[start] = false;
         colorMask[start] = false;
-        fullSpaces[end] = true;
+        occupied[end] = true;
         colorMask[end] = (piece >> 4) == 1;
     }
 
     public void MovePieceToFullSpace(int start, int end, int piece, int takenPiece)
     {
-        if (takenPiece == 0)
-        {
-            MovePieceToEmptySpace(start, end, piece);
-            return;
-        }
-
         piecePositionBoards[BitBoardIndex(takenPiece)][end] = false;
         piecePositionBoards[BitBoardIndex(piece)][start] = false;
         piecePositionBoards[BitBoardIndex(piece)][end] = true;
 
-        fullSpaces[start] = false; // no need to update full spaces at end, there will still be a piece
+        occupied[start] = false; // no need to update full spaces at end, there will still be a piece
         colorMask[start] = false;
         colorMask[end] = (piece >> 4) == 1;
     }
 
     public void TurnPawnToQueen(int pos, int color)
     {
-        piecePositionBoards[queen - 1 + (6 * color)][pos] = true; //queen = true
+        piecePositionBoards[QUEEN - 1 + (6 * color)][pos] = true; //queen = true
         piecePositionBoards[6 * color][pos] = false; //pawn = false
     }
 
     public void TurnQueenToPawn(int pos, int color) //for undoing promotions
     {
-        piecePositionBoards[queen - 1 + (6 * color)][pos] = false;
+        piecePositionBoards[QUEEN - 1 + (6 * color)][pos] = false;
         piecePositionBoards[6 * color][pos] = true;
     }
 
     public int TakeEPPawn(int pos, int color)
     {
         piecePositionBoards[-6 * (color - 1)][(-8 + 16 * color) + pos] = false; // 6 for white (black pawn), 0 for black (white pawn) and -8 for white, 8 for black 
-        fullSpaces[(-8 + 16 * color) + pos] = false;
+        occupied[(-8 + 16 * color) + pos] = false;
         colorMask[(-8 + 16 * color) + pos] = false;
         return (-8 + 16 * color) + pos;
     }

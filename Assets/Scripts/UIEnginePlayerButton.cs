@@ -26,8 +26,8 @@ public class UIEnginePlayerButton : MonoBehaviour
     public void ButtonPressed() 
     {
         bool otherButtonActive = otherButton.IsActivated;
-        EngineState ourState = (player == ChessBoard.white) ? EngineState.White : EngineState.Black;
-        EngineState theirState = (player == ChessBoard.white) ? EngineState.Black : EngineState.White;
+        EngineState ourState = (player == ChessBoard.WHITE) ? EngineState.White : EngineState.Black;
+        EngineState theirState = (player == ChessBoard.WHITE) ? EngineState.Black : EngineState.White;
 
         IsActivated = !IsActivated;
 

@@ -25,7 +25,7 @@ public class Evaluation
         for (int i = 0; i < 64; i++)
         {
             int currentPiece = moveGenerator.board[i];
-            int valueSign = (ChessBoard.PieceColor(currentPiece) == ChessBoard.white) ? 1 : -1;
+            int valueSign = (ChessBoard.PieceColor(currentPiece) == ChessBoard.WHITE) ? 1 : -1;
             int currentValue = pieceValues[ChessBoard.PieceType(currentPiece)] * valueSign;
             output += currentValue;
         }
@@ -53,12 +53,12 @@ public class Evaluation
     {
         int output = 0;
         bool endgame = IsEndgame();
-        foreach (int piece in ChessBoard.possiblePieces)
+        foreach (int piece in ChessBoard.POSSIBLE_PIECES)
         {
             foreach (int space in moveGenerator.board.FindPieces(piece))
             {
                 if (space == -1) break;
-                int colorSign = ChessBoard.PieceColor(piece) == ChessBoard.black ? -1 : 1;
+                int colorSign = ChessBoard.PieceColor(piece) == ChessBoard.BLACK ? -1 : 1;
                 int spaceValue = PieceBonusTable.Read(piece, space, endgame);
                 output += spaceValue * colorSign;
             }
@@ -69,19 +69,19 @@ public class Evaluation
     int EndgameKingCornerBonus(int player)
     {
         int smallestCornerDistance = 32;
-        int otherKingPos = (player == white) ? moveGenerator.blackKingPosition : moveGenerator.whiteKingPosition;
+        int otherKingPos = (player == WHITE) ? moveGenerator.board.BlackKingPosition() : moveGenerator.board.WhiteKingPosition();
         foreach (int corner in corners)
         {
             int distance = Distance(otherKingPos, corner);
             if (distance < smallestCornerDistance) smallestCornerDistance = distance;
         }
-        return ((8 - smallestCornerDistance) + (8 - ChessBoard.Distance(moveGenerator.blackKingPosition, moveGenerator.whiteKingPosition))) * endgameKingCornerBonusMultiplier;
+        return ((8 - smallestCornerDistance) + (8 - ChessBoard.Distance(moveGenerator.board.BlackKingPosition(), moveGenerator.board.WhiteKingPosition()))) * endgameKingCornerBonusMultiplier;
     }
 
     int BoardControlBonus()
     {
-        BitBoard whiteSpaces = moveGenerator.isSpaceAttackedByWhite;
-        BitBoard blackSpaces = moveGenerator.isSpaceAttackedByBlack;
+        BitBoard whiteSpaces = moveGenerator.GenerateAttackedSpaceBitboard(WHITE);
+        BitBoard blackSpaces = moveGenerator.GenerateAttackedSpaceBitboard(BLACK);
         return (whiteSpaces.CountActive() - blackSpaces.CountActive()) * controlBonusMultiplier;
     }
 
@@ -93,11 +93,11 @@ public class Evaluation
         {
             if (System.Math.Sign(eval) == 1)
             {
-                eval += EndgameKingCornerBonus(white);
+                eval += EndgameKingCornerBonus(WHITE);
             }
             else if (System.Math.Sign(eval) == -1)
             {
-                eval -= EndgameKingCornerBonus(black);
+                eval -= EndgameKingCornerBonus(BLACK);
             }
         }
         if (moveGenerator.IsPlayerInCheck(player)) eval -= checkBonus;
@@ -105,7 +105,7 @@ public class Evaluation
         eval += BonusValue();
         eval += BoardControlBonus();
         //if (endgame) eval += EndgameKingDistanceBonus();
-        return (player == ChessBoard.white) ? eval : -eval;
+        return (player == ChessBoard.WHITE) ? eval : -eval;
     }
 
     //move evaluation, used for moveordering

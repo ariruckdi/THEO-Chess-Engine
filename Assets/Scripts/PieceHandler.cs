@@ -117,7 +117,7 @@ public class PieceHandler : MonoBehaviour
 
     public void ChangePieceToQueen(int position, int color)
     {
-        if (color == ChessBoard.black) ChangePieceSprite(position, pieceObjects[10].GetComponent<SpriteRenderer>().sprite);
+        if (color == ChessBoard.BLACK) ChangePieceSprite(position, pieceObjects[10].GetComponent<SpriteRenderer>().sprite);
         else ChangePieceSprite(position, pieceObjects[4].GetComponent<SpriteRenderer>().sprite);
     }
 
@@ -134,8 +134,8 @@ public class PieceHandler : MonoBehaviour
         piecePositions[newSpace] = pieceToMove;
         if ((SpaceY(newSpace) == 0 || SpaceY(newSpace) == 7)) //pawn got maybe promoted
         {
-            if (moveGenerator.board.Contains(newSpace, whitePiece | queen)) ChangePieceToQueen(newSpace, white);
-            if (moveGenerator.board.Contains(newSpace, blackPiece | queen)) ChangePieceToQueen(newSpace, black);
+            if (moveGenerator.board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
+            if (moveGenerator.board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
         }
     }
 
@@ -157,8 +157,8 @@ public class PieceHandler : MonoBehaviour
         piecePositions[newSpace] = pieceToMove;
         if ((SpaceY(newSpace) == 0 || SpaceY(newSpace) == 7)) //pawn got maybe promoted
         {
-            if (moveGenerator.board.Contains(newSpace, whitePiece | queen)) ChangePieceToQueen(newSpace, white);
-            if (moveGenerator.board.Contains(newSpace, blackPiece | queen)) ChangePieceToQueen(newSpace, black);
+            if (moveGenerator.board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
+            if (moveGenerator.board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
         }
         while (Time.time - startTime <= animTime)
         {        
@@ -236,7 +236,7 @@ public class PieceHandler : MonoBehaviour
             selectedPiece.GetComponent<SpriteRenderer>().color = Color.white; 
             
             if(moveGenerator.IsPlayerInCheck(manager.playerOnTurn)) { //oh god nooo
-                int kingSpace = (manager.playerOnTurn == white) ? moveGenerator.whiteKingPosition : moveGenerator.blackKingPosition;
+                int kingSpace = (manager.playerOnTurn == WHITE) ? moveGenerator.board.WhiteKingPosition() : moveGenerator.board.BlackKingPosition();
                 spaceHandler.HighlightSpace(kingSpace, Color.red, 0.5f);
             }
             

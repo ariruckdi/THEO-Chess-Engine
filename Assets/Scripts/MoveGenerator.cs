@@ -1,3 +1,5 @@
+using UnityEditor.Tilemaps;
+using UnityEngine.UIElements;
 using static ChessBoard;
 
 public struct ChessGameData
@@ -20,24 +22,21 @@ public class MoveGenerator
     public ChessBoard board;
 
     //constants
-    public const int shortCastlingWhite = 0, longCastlingWhite = 1, shortCastlingBlack = 2, longCastlingBlack = 3;
-    static readonly int[] slideDirections = new int[] { 8, -8, 1, -1, 9, 7, -7, -9 };
+    public const int SHORT_CASTLING_WHITE = 0, LONG_CASTLING_WHITE = 1, SHORT_CASTLING_BLACK = 2, LONG_CASTLING_BLACK = 3;
+    static readonly int[] SLIDE_DIRECTIONS = new int[] { 8, -8, 1, -1, 9, 7, -7, -9 };
     //up, down, right, left, ur, ul, dr, dl
-    static readonly int[][] pawnDirs = new int[][] { new int[] { 8, 9, 7 }, new int[] { -8, -7, -9 } };
-    static readonly int[][] knightDirs = new int[][] { new int[] { 15, 17 }, new int[] { -15, -17 }, new int[] { -6, 10 }, new int[] { 6, -10 } };
+    static readonly int[][] KNIGHT_DIRECTIONS = new int[][] { new int[] { 15, 17 }, new int[] { -15, -17 }, new int[] { -6, 10 }, new int[] { 6, -10 } };
     //up, down, right, left
     static int[][] SpacesToEdge;
+    static BitBoard[] PrecomputedKnightSpaces, PrecomputedWhitePawnAttacks, PrecomputedBlackPawnAttacks;
 
-    static readonly int[] castlingSpacesWhite = new int[] { 5, 6, 2, 3, 1};
-    static readonly int[] castlingSpacesBlack = new int[] {5 + 8 * 7, 6 + 8 * 7, 2 + 8 * 7, 3 + 8 * 7, 1 + 8 * 7};
+    static readonly int[] CASTLING_SPACES_WHITE = new int[] { 5, 6, 2, 3, 1};
+    static readonly int[] CASTLING_SPACES_BLACK = new int[] {5 + 8 * 7, 6 + 8 * 7, 2 + 8 * 7, 3 + 8 * 7, 1 + 8 * 7};
 
-    static readonly int[][] castlingSpaces = {castlingSpacesWhite, castlingSpacesBlack};
+    static readonly int[][] CASTLING_SPACES = {CASTLING_SPACES_WHITE, CASTLING_SPACES_BLACK};
 
     //variables
     public ChessGameData gameData;
-    public BitBoard isSpaceAttackedByWhite, isSpaceAttackedByBlack;
-    public int whiteKingPosition;
-    public int blackKingPosition;
 
     //hashing
     ZobristHashing hashing;
@@ -45,22 +44,26 @@ public class MoveGenerator
     public MoveGenerator()
     {
         board = new ChessBoard();
-        gameData = new ChessGameData(white, 0, new bool[] { true, true, true, true });
-        hashing = new ZobristHashing((ulong)whiteSpaces);
-        GenerateSpacesToEdgeData();
+        gameData = new ChessGameData(WHITE, 0, new bool[] { true, true, true, true });
+        hashing = new ZobristHashing((ulong)WHITE_SPACES);
+        SpacesToEdge = GenerateSpacesToEdgeData();
+        PrecomputedKnightSpaces = PrecomputeKnightSpaces();
+        PrecomputedWhitePawnAttacks = PrecomputeWhitePawnAttacks();	
+        PrecomputedBlackPawnAttacks = PrecomputeBlackPawnAttacks();
     }
 
     //getters and initalisation
-    static void GenerateSpacesToEdgeData()
+    static int[][] GenerateSpacesToEdgeData()
     {
-        SpacesToEdge = new int[64][];
+        var output = new int[64][];
         for (int i = 0; i < 64; i++)
         {
             int x = SpaceX(i);
             int y = SpaceY(i);
             var edgeData = new int[] { 7 - y, y, 7 - x, x, System.Math.Min(7 - y, 7 - x), System.Math.Min(7 - y, x), System.Math.Min(y, 7 - x), System.Math.Min(y, x) };
-            SpacesToEdge[i] = edgeData;
+            output[i] = edgeData;
         }
+        return output;
     }
 
     public string MoveName(int startSpace, int endSpace, bool longNotation = false)
@@ -100,103 +103,87 @@ public class MoveGenerator
     {
         board = FENHandler.ReadFEN(fenNotation);
         gameData = FENHandler.GameDataFromFEN(fenNotation);
-        SetKingPositions();
-        SetAttackedSpaceData();
     }
 
     //pseudo legal movegen
-    private BitBoard GetSlideSpaces(int space, int pieceType, int range = 8, bool capturesOnly = false)
+    private BitBoard GetSlideSpaces(int space, int color, int pieceType, int range = 8, bool capturesOnly = false)
     {
         int pieceOnNewSpaceColor, newSpace;
-        int movingPieceColor = PieceColor(board[space]);
-        int dirStart = (pieceType == bishop) ? 4 : 0;
-        int dirEnd = (pieceType == rook) ? 4 : 8;
+        int dirStart = (pieceType == BISHOP) ? 4 : 0;
+        int dirEnd = (pieceType == ROOK) ? 4 : 8;
         BitBoard output = new BitBoard(0);
         for (int dirIndex = dirStart; dirIndex < dirEnd; dirIndex++)
         {
             for (int i = 0; i < SpacesToEdge[space][dirIndex]; i++)
             {
-                newSpace = space + slideDirections[dirIndex] * (i + 1);
+                newSpace = space + SLIDE_DIRECTIONS[dirIndex] * (i + 1);
                 pieceOnNewSpaceColor = PieceColor(board[newSpace]);
-                if (pieceOnNewSpaceColor == movingPieceColor || (i + 1) > range) break;
-                if (pieceOnNewSpaceColor == (movingPieceColor ^ 0b1)) {output[newSpace] = true; break;}
+                if (pieceOnNewSpaceColor == color || (i + 1) > range) break;
+                if (pieceOnNewSpaceColor == (color ^ 1)) {output[newSpace] = true; break;}
                 output[newSpace] = !capturesOnly;
             }
         }
         return output;
     }
 
-    private BitBoard GetPawnSpaces(int space, bool capturesOnly = false)
+    private BitBoard GetPawnPushes(int space, int color)
     {
-        int newSpace, newSpacePieceColor, doublePushRow;
+        BitBoard pawn = BitBoard.FromIndex(space);
+        var result = new BitBoard();
+        if (color == WHITE) {
+            result += BitBoard.ShiftNorth(pawn) & ~board.occupied;
+            if (SpaceY(space) == 1 && !result.IsEmpty()) result += BitBoard.ShiftNorthDouble(pawn) & ~board.occupied;;
+        } else {
+            result += BitBoard.ShiftSouth(pawn) & ~board.occupied;
+            if (SpaceY(space) == 6 && !result.IsEmpty()) result += BitBoard.ShiftSouthDouble(pawn) & ~board.occupied;;
+        }
+        return result;
+    }
+
+    private BitBoard GetPawnCaptures(int space, int color) 
+    {
+        if (color == WHITE) return PrecomputedWhitePawnAttacks[space] & (board.BlackOccupied() + BitBoard.FromIndex(gameData.epSpace));
+        return PrecomputedBlackPawnAttacks[space] & (board.WhiteOccupied() + BitBoard.FromIndex(gameData.epSpace));
+    }
+
+    private BitBoard GetPawnSpaces(int space, int color, bool capturesOnly = false)
+    {
         var output = new BitBoard();
-        int pieceColor = PieceColor(board[space]);
-        newSpace = space + pawnDirs[pieceColor][0];
-        newSpacePieceColor = PieceColor(board[newSpace]);
-        if (newSpacePieceColor == -1 && !capturesOnly)
-        {
-            output[newSpace] = true;
-            doublePushRow = (pieceColor == white) ? 1 : 6;
-            if (SpaceY(space) == doublePushRow)
-            {
-                newSpace += pawnDirs[pieceColor][0];
-                newSpacePieceColor = PieceColor(board[newSpace]);
-                if (newSpacePieceColor == -1)
-                {
-                    output[newSpace] = true;
-                }
-            }
-        }
-        foreach (int possibleCapture in GetSpacesAttackedByPawn(space).GetActive())
-        {
-            if (possibleCapture == -1) break;
-            if (PieceColor((board[possibleCapture])) == (pieceColor ^ 0b1) || possibleCapture == gameData.epSpace)
-            {
-                output[possibleCapture] = true;
-            }
-        }
+        if (!capturesOnly) output += GetPawnPushes(space, color);
+        output += GetPawnCaptures(space, color);
         return output;
     }
 
-    private BitBoard GetSpacesAttackedByPawn(int space) //useful for finding attacked spaces
+    private BitBoard GetSpacesAttackedByPawn(int space, int color) //useful for finding attacked spaces
     {
-        int newSpace, newSpacePieceColor;
-        var output = new BitBoard();
-        int pieceColor = PieceColor(board[space]);
-        for (int dirIndex = 1; dirIndex < 3; dirIndex++)
-        {
-            if (SpacesToEdge[space][dirIndex + 1] >= 1)
-            {
-                newSpace = space + pawnDirs[pieceColor][dirIndex];
-                newSpacePieceColor = PieceColor(board[newSpace]);
-                if (newSpacePieceColor != pieceColor)
-                {
-                    output[newSpace] = true;
-                }
-            }
-        }
-        return output;
+        if (color == WHITE) return PrecomputedWhitePawnAttacks[space] & ~board.WhiteOccupied();
+        return PrecomputedBlackPawnAttacks[space] & ~board.BlackOccupied();
     }
 
-    private BitBoard GetKnightSpaces(int space, bool capturesOnly = false)
+    private BitBoard GetKnightSpaces(int space, int color, bool capturesOnly = false)
     {
-        int newSpacePieceColor, newSpace, deltaX;
-        var output = new BitBoard();
-        int pieceColor = PieceColor(board[space]);
-        for (int directionIndex = 0; directionIndex < 4; directionIndex++)
+        if (capturesOnly) return PrecomputedKnightSpaces[space] & board.ColorOccupied(color ^ 1);
+        return PrecomputedKnightSpaces[space] & ~board.ColorOccupied(color);
+    }
+
+    private static BitBoard[] PrecomputeKnightSpaces()
+    {
+        BitBoard[] output = new BitBoard[64];
+        int newSpace, deltaX;
+        for (int space = 0; space < 64; space++)
         {
-            if (SpacesToEdge[space][directionIndex] >= 2)
+            output[space] = new BitBoard();
+            for (int directionIndex = 0; directionIndex < 4; directionIndex++)
             {
-                for (int i = 0; i < 2; i++)
+                if (SpacesToEdge[space][directionIndex] >= 2)
                 {
-                    newSpace = space + knightDirs[directionIndex][i];
-                    if (newSpace >= 0 && newSpace < 64)
+                    for (int i = 0; i < 2; i++)
                     {
-                        newSpacePieceColor = PieceColor(board[newSpace]);
+                        newSpace = space + KNIGHT_DIRECTIONS[directionIndex][i];
                         deltaX = System.Math.Abs(SpaceX(newSpace) - SpaceX(space));
-                        if (newSpacePieceColor != pieceColor && (deltaX == 1 || deltaX == 2))
+                        if (newSpace >= 0 && newSpace < 64 && (deltaX == 1 || deltaX == 2))
                         {
-                            output[newSpace] = ((newSpacePieceColor == -1) && (!capturesOnly)) || (newSpacePieceColor == (pieceColor ^ 1));
+                            output[space] += BitBoard.FromIndex(newSpace);
                         }
                     }
                 }
@@ -205,48 +192,56 @@ public class MoveGenerator
         return output;
     }
 
-    //completly useless wrappers, kept for completeness
-    private BitBoard GetBishopSpaces(int space)
+    private static BitBoard[] PrecomputeWhitePawnAttacks()
     {
-        return GetSlideSpaces(space, 3);
-    }
-
-    private BitBoard GetRookSpaces(int space)
-    {
-        return GetSlideSpaces(space, 4);
-    }
-
-    private BitBoard GetQueenSpaces(int space)
-    {
-        return GetSlideSpaces(space, 5);
-    }
-
-    private BitBoard GetKingSpaces(int space, bool capturesOnly, int player, bool includeCastling)
-    {
-        var output = GetSlideSpaces(space, king, 1, capturesOnly: capturesOnly);
-        if (includeCastling == false || capturesOnly) return output;
-        int castlingRow = 7 * player;
-        bool shortCastlingValid, longCastlingValid;
-        if (space == castlingRow * 8 + 4 && !IsPlayerInCheck(player))
+        var result = new BitBoard[64];
+        for (int space = 0; space < 64; space++)
         {
-            BitBoard attackedSpaces = GenerateAttackedSpaceBitboard(player ^ 1);
-            if (gameData.castling[2 * player]) // short
+            result[space] = new BitBoard();
+            BitBoard pawn = BitBoard.FromIndex(space);
+            result[space] += BitBoard.ShiftNorthEast(pawn) + BitBoard.ShiftNorthWest(pawn);
+        }
+        return result;
+    }
+
+    private static BitBoard[] PrecomputeBlackPawnAttacks()
+    {
+        var result = new BitBoard[64];
+        for (int space = 0; space < 64; space++)
+        {
+            result[space] = new BitBoard();
+            BitBoard pawn = BitBoard.FromIndex(space);
+            result[space] += BitBoard.ShiftSouthEast(pawn) + BitBoard.ShiftSouthWest(pawn);
+        }
+        return result;
+    }
+
+    private BitBoard GetKingSpaces(int space, int color, bool capturesOnly, bool includeCastling)
+    {
+        var output = GetSlideSpaces(space, color, KING, 1, capturesOnly: capturesOnly);
+        if (includeCastling == false || capturesOnly) return output;
+        int castlingRow = 7 * color;
+        bool shortCastlingValid, longCastlingValid;
+        if (space == castlingRow * 8 + 4 && !IsPlayerInCheck(color))
+        {
+            BitBoard attackedSpaces = GenerateAttackedSpaceBitboard(color ^ 1);
+            if (gameData.castling[2 * color]) // short
             {
                 shortCastlingValid = true;
                 for (int i = 0; i < 2; i++)
                 {
-                    if (board.fullSpaces[castlingSpaces[player][i]]) {shortCastlingValid = false; break;} //cant castle is pieces are in the way
-                    if (attackedSpaces[castlingSpaces[player][i]]) {shortCastlingValid = false; break;} //cant castle through check
+                    if (board.occupied[CASTLING_SPACES[color][i]]) {shortCastlingValid = false; break;} //cant castle is pieces are in the way
+                    if (attackedSpaces[CASTLING_SPACES[color][i]]) {shortCastlingValid = false; break;} //cant castle through check
                 }
                 if (shortCastlingValid) output[space + 2] = true;
             }
-            if (gameData.castling[2 * player + 1]) // long
+            if (gameData.castling[2 * color + 1]) // long
             {
                 longCastlingValid = true;
                 for (int i = 2; i < 5; i++)
                 {
-                    if (board.fullSpaces[castlingSpaces[player][i]]) {longCastlingValid = false; break;}
-                    if (attackedSpaces[castlingSpaces[player][i]]) {longCastlingValid = false; break;}
+                    if (board.occupied[CASTLING_SPACES[color][i]]) {longCastlingValid = false; break;}
+                    if (attackedSpaces[CASTLING_SPACES[color][i]]) {longCastlingValid = false; break;}
                 }
                 if (longCastlingValid) output[space - 2] = true;
             }
@@ -255,60 +250,47 @@ public class MoveGenerator
         return output;
     }
 
-    public BitBoard GetPossibleSpacesForPiece(int space, bool possibleCapturesOnly = false, bool includeCastling = true)
+    public BitBoard GetPossibleSpacesForPiece(int space, int piece, bool capturesOnly = false, bool includeCastling = true)
     {
-        int pieceType = PieceType(board[space]);
-        if (pieceType == pawn) return GetPawnSpaces(space, capturesOnly: possibleCapturesOnly);
-        else if (bishop <= pieceType && pieceType <= queen) return GetSlideSpaces(space, pieceType, capturesOnly: possibleCapturesOnly);
-        else if (pieceType == knight) return GetKnightSpaces(space, capturesOnly: possibleCapturesOnly);
-        else if (pieceType == king) return GetKingSpaces(space, capturesOnly: possibleCapturesOnly, player: PieceColor(board[space]), includeCastling);
+        int pieceType = PieceType(piece);
+        int pieceColor = PieceColor(piece);
+        if (pieceType == PAWN) return GetPawnSpaces(space, pieceColor, capturesOnly: capturesOnly);
+        else if (BISHOP <= pieceType && pieceType <= QUEEN) return GetSlideSpaces(space, pieceColor, pieceType, capturesOnly: capturesOnly);
+        else if (pieceType == KNIGHT) return GetKnightSpaces(space, pieceColor, capturesOnly: capturesOnly);
+        else if (pieceType == KING) return GetKingSpaces(space, pieceColor, capturesOnly:capturesOnly, includeCastling);
         else return new BitBoard(0);
     }
 
     //legal movegen and prerequisites
     public BitBoard GenerateAttackedSpaceBitboard(int player)
     {
-        int currentPiece;
+        int piece;
         var output = new BitBoard();
-        foreach (int space in board.fullSpaces.GetActive())
+        foreach (int space in board.ColorOccupied(player).GetActive())
         {
             if (space == -1) break;
-            currentPiece = board[space];
-            if (PieceColor(currentPiece) == player)
+            piece = board[space];
+            if (PieceType(piece) == PAWN)
             {
-                if (PieceType(currentPiece) == pawn)
-                {
-                    output += GetSpacesAttackedByPawn(space);
-                }
-                else
-                {
-                    output += GetPossibleSpacesForPiece(space, includeCastling: false);
-                }
+                output += GetSpacesAttackedByPawn(space, player);
+            }
+            else
+            {
+                output += GetPossibleSpacesForPiece(space, piece, includeCastling: false);
             }
         }
         return output;
     }
 
-    void SetAttackedSpaceData()
-    {
-        isSpaceAttackedByBlack = GenerateAttackedSpaceBitboard(black);
-        isSpaceAttackedByWhite = GenerateAttackedSpaceBitboard(white);
-    }
-
-    void SetKingPositions()
-    {
-        blackKingPosition = board.BlackKingPosition();
-        whiteKingPosition = board.WhiteKingPosition();
-    }
 
     int KingPosition(int player)
     {
-        return (player == white) ? whiteKingPosition : blackKingPosition;
+        return (player == WHITE) ? board.WhiteKingPosition() : board.BlackKingPosition();
     }
 
     public bool IsPlayerInCheck(int player)
     {
-        var bitboardToCheck = (player == white) ? isSpaceAttackedByBlack : isSpaceAttackedByWhite;
+        var bitboardToCheck = (player == WHITE) ? GenerateAttackedSpaceBitboard(BLACK) : GenerateAttackedSpaceBitboard(WHITE);
         return bitboardToCheck[KingPosition(player)];
     }
 
@@ -317,8 +299,7 @@ public class MoveGenerator
         //variables
         int piece = board[space];
         int player = PieceColor(piece);
-        int pieceType = PieceType(piece);
-        var output = GetPossibleSpacesForPiece(space);
+        var output = GetPossibleSpacesForPiece(space, piece);
 
         //checking legality
         foreach (int newSpace in output.GetActive())
@@ -341,8 +322,8 @@ public class MoveGenerator
 
     public BitBoard GetLegalCapturesForPiece(int space)
     {
-        BitBoard output = GetPossibleSpacesForPiece(space, true);
         int piece = board[space];
+        BitBoard output = GetPossibleSpacesForPiece(space, piece, true);
         int player = PieceColor(piece);
         //no need for castling, thats not a capture :D
         foreach (int newSpace in output.GetActive())
@@ -372,100 +353,67 @@ public class MoveGenerator
         int color = PieceColor(piece);
         int type = PieceType(piece);
         int capture = undoData.takenPiece;
-        bool isCapture = (capture != 0);
+        bool isCapture = capture != 0;
         int shortCastlingIndex = color * 2; // 0 for white, 2 for black
         int longCastlingIndex = color * 2 + 1; // 1 for white, 3 for black
 
+        //may change due to branch
+        gameData.epSpace = 0;
+
         //castling + castling prevention when king moved
-        if (type == king)
+        if (type == KING)
         {
             int deltaX = end - start;
             if (!isCapture && (deltaX == 2 || deltaX == -2)) //keeps castling code from running all the time, castling is never a capture
             {
-                int castlingRook = PieceInt(rook, color);
-                if (deltaX == 2)
-                { // short castling
-                    board.MovePieceToEmptySpace(rooksBefore[shortCastlingIndex], rooksAfter[shortCastlingIndex], castlingRook);
-                }
-                else if (deltaX == -2)
-                { // long castling
-                    board.MovePieceToEmptySpace(rooksBefore[longCastlingIndex], rooksAfter[longCastlingIndex], castlingRook);
-                }
+                int castlingRook = PieceInt(ROOK, color);
+                if (deltaX == 2) board.MovePieceToEmptySpace(ROOKS_BEFORE_CASTLING[shortCastlingIndex], ROOKS_AFTER_CASTLING[shortCastlingIndex], castlingRook); //short
+                else if (deltaX == -2) board.MovePieceToEmptySpace(ROOKS_BEFORE_CASTLING[longCastlingIndex], ROOKS_AFTER_CASTLING[longCastlingIndex], castlingRook); //long
             }
             // no castling after moving kings
             gameData.castling[shortCastlingIndex] = false;
             gameData.castling[longCastlingIndex] = false;
-            if (color == black) blackKingPosition = end;
-            else if (color == white) whiteKingPosition = end;
         }
 
         //castling prevention after rook moved
-        else if (type == rook)
+        else if (type == ROOK)
         {
-            if (SpaceX(start) == 7 && gameData.castling[shortCastlingIndex])
-            {
-                gameData.castling[shortCastlingIndex] = false;
-            }
-            else if (SpaceX(start) == 0 && gameData.castling[longCastlingIndex])
-            {
-                gameData.castling[longCastlingIndex] = false;
-            }
-        }
-
-        //taking the pawn in case of e.p.
-        else if (type == pawn)
-        {
-            if (end == gameData.epSpace && gameData.epSpace != 0)
-            {
-                int spaceToTake = board.TakeEPPawn(end, color);
-            }
+            if (SpaceX(start) == 7) gameData.castling[shortCastlingIndex] = false;
+            else if (SpaceX(start) == 0) gameData.castling[longCastlingIndex] = false;
         }
 
         //prventing castling when rook needed for it was taken
-        if (isCapture && (end == 7 || end == 0 || end == 63 || end == 56))
+        if (PieceType(capture) == ROOK && (end == 7 || end == 0 || end == 63 || end == 56))
         {
-            if (board.Contains(end, whitePiece | rook))
+            if (PieceColor(capture) == WHITE)
             {
                 gameData.castling[shortCastlingIndex] = (!(end == 7)) && gameData.castling[shortCastlingIndex];
                 gameData.castling[longCastlingIndex] = (!(end == 0)) && gameData.castling[longCastlingIndex];
             }
-            else if (board.Contains(end, blackPiece | rook)) // ugly repetition
+            else if (PieceColor(capture) == BLACK) // ugly repetition
             {
                 gameData.castling[shortCastlingIndex] = (!(end == 63)) && gameData.castling[shortCastlingIndex];
                 gameData.castling[longCastlingIndex] = (!(end == 56)) && gameData.castling[longCastlingIndex];
             }
         }
 
-        //leave that like this! dont put it in the if clause up there. IT WILL BREAK
-
-        //setting the e.p space for the next move
-        if (!isCapture && System.Math.Abs(start / 8 - end / 8) == 2 && type == pawn)
+        //en passant execution and space setting
+        else if (type == PAWN)
         {
-            gameData.epSpace = (color == black) ? end + 8 : end - 8;
-        }
-        else
-        {
-            gameData.epSpace = 0;
+            if (end == gameData.epSpace && gameData.epSpace != 0) board.TakeEPPawn(end, color);
+            else if (!isCapture && System.Math.Abs(SpaceY(start) - SpaceY(end)) == 2) gameData.epSpace = (color == BLACK) ? end + 8 : end - 8;
         }
 
         // making the actual move
-        if (!isCapture)
-        {
-            board.MovePieceToEmptySpace(start, end, piece);
-        }
-        else
-        {
-            board.MovePieceToFullSpace(start, end, piece, capture);
-        }
+        if (!isCapture) board.MovePieceToEmptySpace(start, end, piece);
+        else board.MovePieceToFullSpace(start, end, piece, capture);
 
         // turning pawns to queens on promotion
-        if ((SpaceY(end) == 7 || SpaceY(end) == 0) && type == pawn) // pawn of own color never will go backwards
+        if ((SpaceY(end) == 7 || SpaceY(end) == 0) && type == PAWN) // pawn of own color never will go backwards
         {
             board.TurnPawnToQueen(end, color);
             undoData.wasPromotion = true;
         }
-
-        SetAttackedSpaceData();
 
         gameData.playerOnTurn ^= 1;
 
@@ -477,29 +425,28 @@ public class MoveGenerator
         board.MovePieceToEmptySpace(undoData.end, undoData.start, undoData.movedPiece);
         gameData.castling = undoData.castlingBefore;
         gameData.epSpace = undoData.epSpaceBefore;
+        int movedPieceColor = PieceColor(undoData.movedPiece);
         if (undoData.takenPiece != 0)
         {
             board.CreatePiece(undoData.end, undoData.takenPiece);
         }
         if (undoData.wasPromotion)
         {
-            board.TurnQueenToPawn(undoData.start, PieceColor(undoData.movedPiece));
+            board.TurnQueenToPawn(undoData.start, movedPieceColor);
         }
         if (undoData.end == undoData.epSpaceBefore && undoData.end != 0)
         { // move was en passant
-            int pawnColor = (PieceColor(undoData.movedPiece) == white) ? blackPiece : whitePiece;
-            int epOffset = (pawnColor == blackPiece) ? -8 : 8;
-            board.CreatePiece(undoData.end + epOffset, pawn | pawnColor);
+            int pawnColor = (movedPieceColor == WHITE) ? BLACK_PIECE : WHITE_PIECE;
+            int epOffset = (pawnColor == BLACK_PIECE) ? -8 : 8;
+            board.CreatePiece(undoData.end + epOffset, PAWN | pawnColor);
             return; // ep cant be castling
         }
         if (undoData.castlingIndex != -1)
         { // move was castling
-            int rookColor = (PieceColor(undoData.movedPiece) == white) ? whitePiece : blackPiece;
-            board.MovePieceToEmptySpace(rooksAfter[undoData.castlingIndex], rooksBefore[undoData.castlingIndex], rook | rookColor);
+            int rookColor = (movedPieceColor == WHITE) ? WHITE_PIECE : BLACK_PIECE;
+            board.MovePieceToEmptySpace(ROOKS_AFTER_CASTLING[undoData.castlingIndex], ROOKS_BEFORE_CASTLING[undoData.castlingIndex], ROOK | rookColor);
         }
-        SetKingPositions();
         gameData.playerOnTurn ^= 1;
-
     }
 
     //Hashing for TranspoTable

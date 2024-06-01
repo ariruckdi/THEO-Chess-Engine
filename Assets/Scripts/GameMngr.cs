@@ -139,20 +139,20 @@ public class GameMngr : MonoBehaviour
         engine.transpositionTable.Clear();
         if (!engineMove)
         { //engine prints in Update(), cant predict when it would be done
-            if (playerOnTurn == white) console.Line("W: " + moveGenerator.MoveName(start, end));
-            if (playerOnTurn == black) console.Line("B: " + moveGenerator.MoveName(start, end));
+            if (playerOnTurn == WHITE) console.Line("W: " + moveGenerator.MoveName(start, end));
+            if (playerOnTurn == BLACK) console.Line("B: " + moveGenerator.MoveName(start, end));
         }
         lastMove = moveGenerator.MovePiece(start, end);
         if (lastMove.castlingIndex != -1) // Castling!
         {
-            pieceHandler.MovePieceSprite(rooksBefore[lastMove.castlingIndex], rooksAfter[lastMove.castlingIndex]);
+            pieceHandler.MovePieceSprite(ROOKS_BEFORE_CASTLING[lastMove.castlingIndex], ROOKS_AFTER_CASTLING[lastMove.castlingIndex]);
         }
         else if (lastMove.end == lastMove.epSpaceBefore) // en passant
         {
-            int epOffset = (PieceColor(lastMove.movedPiece) == white) ? -8 : 8;
+            int epOffset = (PieceColor(lastMove.movedPiece) == WHITE) ? -8 : 8;
             pieceHandler.DisablePiece(lastMove.end + epOffset);
         }
-        playerOnTurn = (playerOnTurn == white) ? black : white;
+        playerOnTurn = (playerOnTurn == WHITE) ? BLACK : WHITE;
         moveMade.Invoke();
     }
 
@@ -205,7 +205,7 @@ public class GameMngr : MonoBehaviour
         gameOver = false;
         currentState = GameState.Running;
 
-        playerOnTurn = (playerOnTurn == white) ? black : white;
+        playerOnTurn = (playerOnTurn == WHITE) ? BLACK : WHITE;
     }
 
     public void FlipBoard()
@@ -225,8 +225,8 @@ public class GameMngr : MonoBehaviour
         int materialSum = engine.Evaluation.MaterialSum();
         int materialValue = engine.Evaluation.MaterialValue();
 
-        int numPawns = moveGenerator.board.PieceCount(whitePiece | pawn) + moveGenerator.board.PieceCount(blackPiece | pawn);
-        int numRooks = moveGenerator.board.PieceCount(whitePiece | rook) + moveGenerator.board.PieceCount(blackPiece | rook);
+        int numPawns = moveGenerator.board.PieceCount(WHITE_PIECE | PAWN) + moveGenerator.board.PieceCount(BLACK_PIECE | PAWN);
+        int numRooks = moveGenerator.board.PieceCount(WHITE_PIECE | ROOK) + moveGenerator.board.PieceCount(BLACK_PIECE | ROOK);
 
         if (materialSum <= 300 && numPawns == 0) return GameState.Draw; //draw when only kings or one piece left
         if (materialSum <= 600 && numPawns == 0 &&  numRooks == 0 && materialSum != System.Math.Abs(materialValue)) return GameState.Draw; //draw when only knights or bishops left
@@ -247,7 +247,7 @@ public class GameMngr : MonoBehaviour
         spaceHandler.UnHighlightAll();
         if (moveGenerator.IsPlayerInCheck(playerOnTurn))
         {
-            int kingSpace = (playerOnTurn == white) ? moveGenerator.whiteKingPosition : moveGenerator.blackKingPosition;
+            int kingSpace = (playerOnTurn == WHITE) ? moveGenerator.board.WhiteKingPosition() : moveGenerator.board.BlackKingPosition();
             spaceHandler.HighlightSpace(kingSpace, Color.red, 0.5f);
         }
         moveHistory.Add(lastMove);
@@ -260,7 +260,7 @@ public class GameMngr : MonoBehaviour
         }
 
         positionHistory.Add(moveGenerator.ZobristHash());
-        if (PieceType(lastMove.movedPiece) == pawn)
+        if (PieceType(lastMove.movedPiece) == PAWN)
         {
             movesWithoutPawn = 0;
         }
@@ -274,11 +274,11 @@ public class GameMngr : MonoBehaviour
             gameOver = true;
         }
         if (gameOver) return;
-        if (engineState == EngineState.Black && playerOnTurn == black)
+        if (engineState == EngineState.Black && playerOnTurn == BLACK)
         {
             engine.ThreadedMove();
         }
-        else if (engineState == EngineState.White && playerOnTurn == white)
+        else if (engineState == EngineState.White && playerOnTurn == WHITE)
         {
             engine.ThreadedMove();
         }
@@ -288,7 +288,7 @@ public class GameMngr : MonoBehaviour
     {
         console.Line("The game ended.");
         engineState = EngineState.Off;
-        string playerStr = (playerOnTurn == white) ? "White" : "Black";
+        string playerStr = (playerOnTurn == WHITE) ? "White" : "Black";
         if (moveGenerator.IsPlayerInCheck(playerOnTurn))
         {
             console.Print(playerStr + " is checkmate. Type restart to reset board.");
@@ -324,7 +324,7 @@ public class GameMngr : MonoBehaviour
 
         if (engine.currentSearch.valuesChanged)
         {
-            string playerStr = (playerOnTurn == white) ? "W: " : "B: ";
+            string playerStr = (playerOnTurn == WHITE) ? "W: " : "B: ";
             console.ReplaceLast(playerStr + engine.currentSearch.currentBestMoveName.PadRight(6)
                 + " | Static: " + engine.currentSearch.currentBestEval.ToString("N0").PadLeft(7)
                 + " | Depth: " + engine.currentSearch.currentDepth.ToString("N0").PadLeft(3)
@@ -360,46 +360,46 @@ public class GameMngr : MonoBehaviour
     public void DebugOverlay()
     {
         spaceHandler.UnHighlightAll();
-        spaceHandler.HighlightSpaceList(moveGenerator.board.FindPiecesOfColor(white), Color.red, 0.8f);
-        spaceHandler.HighlightSpaceList(moveGenerator.board.FindPiecesOfColor(black), Color.green, 0.8f);
-        spaceHandler.HighlightSpaceList((~moveGenerator.board.fullSpaces).GetActive(), Color.gray, 0.8f);
+        spaceHandler.HighlightSpaceList(moveGenerator.board.FindPiecesOfColor(WHITE), Color.red, 0.8f);
+        spaceHandler.HighlightSpaceList(moveGenerator.board.FindPiecesOfColor(BLACK), Color.green, 0.8f);
+        spaceHandler.HighlightSpaceList((~moveGenerator.board.occupied).GetActive(), Color.gray, 0.8f);
     }
 
     public void MoveGenerationTest(int piece)
     {
         switch (piece)
         {
-            case 1:
+            case PAWN:
                 LoadPosition(pawnTestPos);
                 break;
-            case 2:
+            case KNIGHT:
                 LoadPosition(knightTestPos);
                 break;
-            case 3:
+            case BISHOP:
                 LoadPosition(bishopTestPos);
                 break;
-            case 4:
+            case ROOK:
                 LoadPosition(rookTestPos);
                 break;
-            case 5:
+            case QUEEN:
                 LoadPosition(queenTestPos);
                 break;
-            case 6:
+            case KING:
                 LoadPosition(kingTestPos);
                 break;
         }
         if (piece != 1)
         {
             spaceHandler.UnHighlightAll();
-            var possibleMoves = moveGenerator.GetPossibleSpacesForPiece(3 + 3 * 8).GetActive();
+            var possibleMoves = moveGenerator.GetPossibleSpacesForPiece(3 + 3 * 8, piece | WHITE_PIECE).GetActive();
             spaceHandler.HighlightSpaceList(possibleMoves, Color.cyan, 0.5f);
             spaceHandler.HighlightSpace(27, Color.green, 0.5f);
         }
         else
         {
             spaceHandler.UnHighlightAll();
-            var possibleMoves1 = moveGenerator.GetPossibleSpacesForPiece(3 + 1 * 8).GetActive();
-            var possibleMoves2 = moveGenerator.GetPossibleSpacesForPiece(6 + 5 * 8).GetActive();
+            var possibleMoves1 = moveGenerator.GetPossibleSpacesForPiece(3 + 1 * 8, piece | WHITE_PIECE).GetActive();
+            var possibleMoves2 = moveGenerator.GetPossibleSpacesForPiece(6 + 5 * 8, piece | WHITE_PIECE).GetActive();
             spaceHandler.HighlightSpaceList(possibleMoves1, Color.cyan, 0.5f);
             spaceHandler.HighlightSpaceList(possibleMoves2, Color.magenta, 0.5f);
             spaceHandler.HighlightSpace(11, Color.green, 0.5f);
@@ -410,9 +410,9 @@ public class GameMngr : MonoBehaviour
     public void ShowAttackedSpaces()
     {
         spaceHandler.UnHighlightAll();
-        var attackedSpacesBlack = moveGenerator.GenerateAttackedSpaceBitboard(black).GetActive();
+        var attackedSpacesBlack = moveGenerator.GenerateAttackedSpaceBitboard(BLACK).GetActive();
         spaceHandler.HighlightSpaceList(attackedSpacesBlack, Color.red, 0.25f);
-        var attackedSpacesWhite = moveGenerator.GenerateAttackedSpaceBitboard(white).GetActive();
+        var attackedSpacesWhite = moveGenerator.GenerateAttackedSpaceBitboard(WHITE).GetActive();
         spaceHandler.HighlightSpaceList(attackedSpacesWhite, Color.green, 0.25f);
     }
 

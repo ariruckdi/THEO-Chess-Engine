@@ -19,7 +19,7 @@ public class RandomMoveCommand : ConsoleCommand
         if (manager.searching) return false;
         if (manager.currentState != GameState.Running) return false;
         EngineState prevState = manager.engineState;
-        manager.engineState = (manager.playerOnTurn == ChessBoard.white) ? EngineState.White : EngineState.Black;
+        manager.engineState = (manager.playerOnTurn == ChessBoard.WHITE) ? EngineState.White : EngineState.Black;
         manager.engine.ThreadedMove();
         manager.engineState = prevState;
         return true;

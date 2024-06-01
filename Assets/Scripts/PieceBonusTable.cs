@@ -6,7 +6,7 @@ public static class PieceBonusTable
 {
     public static int Read(int piece, int square, bool endgame = false)
     {
-        if (ChessBoard.PieceColor(piece) == ChessBoard.white)
+        if (ChessBoard.PieceColor(piece) == ChessBoard.WHITE)
         {
             int file = ChessBoard.SpaceX(square);
             int rank = ChessBoard.SpaceY(square);
@@ -15,7 +15,7 @@ public static class PieceBonusTable
         }
 
         int tableIndex = ChessBoard.PieceType(piece) - 1;
-        if (endgame && ChessBoard.PieceType(piece) == ChessBoard.king) tableIndex = 6;
+        if (endgame && ChessBoard.PieceType(piece) == ChessBoard.KING) tableIndex = 6;
         return bonusTables[tableIndex][square];
     }
 
