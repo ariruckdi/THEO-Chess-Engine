@@ -71,9 +71,10 @@ public class ConsoleBehaviour : MonoBehaviour
                 RunCommand(command);
             }
         }
-        if (Input.GetKeyDown(KeyCode.DownArrow))
+        if (Input.GetKeyDown(KeyCode.UpArrow))
         {
             inputUI.text = lastInput; //for easy repeated inputs
+            inputUI.caretPosition = inputUI.text.Length;
         }
     }
 

@@ -11,7 +11,6 @@ public class PieceHandler : MonoBehaviour
     [SerializeField] Dictionary<int, GameObject> piecePositions;
     public SpaceHandler spaceHandler;
     public GameMngr manager;
-    MoveGenerator moveGenerator;
 
     //piece creation
     [SerializeField] GameObject[] pieceObjects;
@@ -24,7 +23,7 @@ public class PieceHandler : MonoBehaviour
     //drag and drop
     GameObject selectedPiece;
     Vector3 transformDelta;
-    int[] possibleMovesForClickedPiece;
+    List<int> possibleMovesForClickedPiece;
     bool inDrag;
 
     //piece moving
@@ -35,7 +34,6 @@ public class PieceHandler : MonoBehaviour
     //init
     void Awake()
     {
-        moveGenerator = manager.moveGenerator;
         respectTurn = manager.dragAndDropRespectsTurns;
         pieceSize = pieceObjects[0].transform.localScale.x;
         piecePositions = new Dictionary<int, GameObject>();
@@ -45,13 +43,13 @@ public class PieceHandler : MonoBehaviour
     public void LayOutPieces(ChessBoard board)
     {
         piecePositions = new Dictionary<int, GameObject>();
-        for (int i = 0; i < 12; i++)
+        for (int pieceIndex = 0; pieceIndex < 12; pieceIndex++)
         {
-            for (int space = 0; space < 64; space++)
+            foreach (int space in board.Occupied.GetActive())
             {
-                if (board.piecePositionBoards[i][space])
+                if (board.ContainsBitBoardIndex(space, pieceIndex))
                 {
-                    GameObject newPiece = Instantiate(pieceObjects[i], spaceHandler.ChessSpaceToWorldSpace(space), Quaternion.identity, gameObject.transform);
+                    GameObject newPiece = Instantiate(pieceObjects[pieceIndex], spaceHandler.ChessSpaceToWorldSpace(space), Quaternion.identity, gameObject.transform);
                     piecePositions.Add(space, newPiece);
                 }
             }
@@ -96,7 +94,7 @@ public class PieceHandler : MonoBehaviour
     public void ReloadPieces()
     {
         ClearBoard();
-        LayOutPieces(moveGenerator.board);
+        LayOutPieces(manager.MoveGenerator.Board);
     }
 
     //moving pieces
@@ -134,8 +132,8 @@ public class PieceHandler : MonoBehaviour
         piecePositions[newSpace] = pieceToMove;
         if ((SpaceY(newSpace) == 0 || SpaceY(newSpace) == 7)) //pawn got maybe promoted
         {
-            if (moveGenerator.board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
-            if (moveGenerator.board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
+            if (manager.MoveGenerator.Board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
+            if (manager.MoveGenerator.Board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
         }
     }
 
@@ -157,8 +155,8 @@ public class PieceHandler : MonoBehaviour
         piecePositions[newSpace] = pieceToMove;
         if ((SpaceY(newSpace) == 0 || SpaceY(newSpace) == 7)) //pawn got maybe promoted
         {
-            if (moveGenerator.board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
-            if (moveGenerator.board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
+            if (manager.MoveGenerator.Board.Contains(newSpace, WHITE_PIECE | QUEEN)) ChangePieceToQueen(newSpace, WHITE);
+            if (manager.MoveGenerator.Board.Contains(newSpace, BLACK_PIECE | QUEEN)) ChangePieceToQueen(newSpace, BLACK);
         }
         while (Time.time - startTime <= animTime)
         {        
@@ -179,7 +177,7 @@ public class PieceHandler : MonoBehaviour
     }
 
     //drag and drop functionality
-    int SnapToSpace(GameObject piece, int startSpace, int[] possibleSpaces)
+    int SnapToSpace(GameObject piece, int startSpace, List<int> possibleSpaces)
     {
         int space = spaceHandler.WorldSpaceToChessSpace(piece.transform.position);
         //resetting the piece in case of an invalid move
@@ -209,9 +207,9 @@ public class PieceHandler : MonoBehaviour
             if (selectedPiece == null) return;
 
             startSpace = spaceHandler.WorldSpaceToChessSpace(selectedPiece.transform.position);
-            possibleMovesForClickedPiece = moveGenerator.GetLegalMovesForPiece(startSpace).GetActive();
+            possibleMovesForClickedPiece = manager.MoveGenerator.GetLegalMovesForPiece(PieceColor(manager.MoveGenerator.Board[startSpace]),startSpace).GetActive();
             
-            if (!respectTurn || manager.playerOnTurn == ChessBoard.PieceColor(moveGenerator.board[startSpace]))
+            if (!respectTurn || manager.playerOnTurn == ChessBoard.PieceColor(manager.MoveGenerator.Board[startSpace]))
             {
                 //selectedPiece.GetComponent<SpriteRenderer>().color = Color.Lerp(Color.white, highlightColor, 0.5f);
 
@@ -235,12 +233,12 @@ public class PieceHandler : MonoBehaviour
             spaceHandler.UnHighlightAll(); // Doesnt need to be fast :D
             selectedPiece.GetComponent<SpriteRenderer>().color = Color.white; 
             
-            if(moveGenerator.IsPlayerInCheck(manager.playerOnTurn)) { //oh god nooo
-                int kingSpace = (manager.playerOnTurn == WHITE) ? moveGenerator.board.WhiteKingPosition() : moveGenerator.board.BlackKingPosition();
+            if(manager.MoveGenerator.IsPlayerInCheck(manager.playerOnTurn)) { //oh god nooo
+                int kingSpace = manager.MoveGenerator.Board.KingPosition(manager.playerOnTurn);
                 spaceHandler.HighlightSpace(kingSpace, Color.red, 0.5f);
             }
             
-            if (manager.lastMove.movedPiece != 0) {
+            if (manager.lastMove.piece != 0) {
                 spaceHandler.HighlightSpace(manager.lastMove.start, Color.yellow, 0.7f);
                 spaceHandler.HighlightSpace(manager.lastMove.end, Color.yellow, 0.7f);
             }

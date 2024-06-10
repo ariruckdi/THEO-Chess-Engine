@@ -1,268 +1,9 @@
-using System.Collections.Generic;
 using System;
-using System.Runtime.Serialization;
-using System.ComponentModel;
-using System.Xml;
-using Unity.Collections;
+using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
-
-public struct BitBoard
-{
-    static readonly int[] LSB_TABLE = {
-        63, 30,  3, 32, 59, 14, 11, 33,
-        60, 24, 50,  9, 55, 19, 21, 34,
-        61, 29,  2, 53, 51, 23, 41, 18,
-        56, 28,  1, 43, 46, 27,  0, 35,
-        62, 31, 58,  4,  5, 49, 54,  6,
-        15, 52, 12, 40,  7, 42, 45, 16,
-        25, 57, 48, 13, 10, 39,  8, 44,
-        20, 47, 38, 22, 17, 37, 36, 26
-    };
-
-    public static readonly BitBoard[] FILES = {(BitBoard)0x0101010101010101, (BitBoard)0x0202020202020202, (BitBoard)0x0404040404040404, (BitBoard)0x0808080808080808, 
-                                        (BitBoard)0x1010101010101010, (BitBoard)0x2020202020202020, (BitBoard)0x4040404040404040, (BitBoard)0x8080808080808080};
-
-    public static readonly BitBoard[] RANKS = {(BitBoard)0x00000000000000ff, (BitBoard)0x000000000000ff00, (BitBoard)0x0000000000ff0000, (BitBoard)0x00000000ff000000, 
-                                        (BitBoard)0x000000ff00000000, (BitBoard)0x0000ff0000000000, (BitBoard)0x00ff000000000000, (BitBoard)0xff00000000000000};
-
-    //core
-    ulong boardInt;
-
-    //init
-    public BitBoard(ulong newBoardInt = 0)
-    {
-        boardInt = newBoardInt;
-    }
-
-    //operators
-    public static BitBoard operator +(BitBoard left, BitBoard right) // combines 2 boards
-    {
-        return new BitBoard(left.boardInt | right.boardInt);
-    }
-
-    public static BitBoard operator &(BitBoard left, BitBoard right) // usable for filtering
-    {
-        return new BitBoard(left.boardInt & right.boardInt);
-    }
-
-    public static BitBoard operator ~(BitBoard input) // inverts board
-    {
-        return new BitBoard(~input.boardInt);
-    }
-
-    public static BitBoard operator >>(BitBoard input, int shift)
-    {
-        return new BitBoard(input.boardInt >> shift);
-    }
-
-    public static BitBoard operator <<(BitBoard input, int shift)
-    {
-        return new BitBoard(input.boardInt << shift);
-    }
-
-    public static explicit operator BitBoard(ulong input)
-    {
-        return new BitBoard(input);
-    }
-
-    public static explicit operator ulong(BitBoard input)
-    {
-        return input.boardInt;
-    }
-
-    public static bool operator ==(BitBoard left, BitBoard right)
-    {
-        if (left.boardInt == right.boardInt) return true;
-        else return false;
-    }
-
-    public static bool operator !=(BitBoard left, BitBoard right)
-    {
-        if (left.boardInt == right.boardInt) return false;
-        else return true;
-    }
-
-    public override bool Equals(object other)
-    {
-        return other is BitBoard && this.Equals(other);
-    }
-
-    public bool Equals(BitBoard other)
-    {
-        return this.boardInt == other.boardInt;
-    }
-
-    public override int GetHashCode()
-    {
-        return boardInt.GetHashCode();
-    }
-
-    //getting and setting
-    public bool this[int index]
-    {
-        get => GetBoolAtSpace(index);
-        set => SetBoolAtSpace(index, value);
-    }
-
-    bool GetBoolAtSpace(int index)
-    {
-        return ((boardInt >> index) & 1) == 1;
-    }
-
-    void SetBoolAtSpace(int index, bool input)
-    {
-        if (input)
-        {
-            boardInt |= (ulong)1 << index;
-        }
-        else
-        {
-            boardInt &= ~((ulong)1 << index);
-        }
-    }
-
-    public static BitBoard FromIndex(int index)
-    {
-        return (BitBoard)1 << index;
-    }
-
-    public bool IsEmpty()
-    {
-        return boardInt == 0;
-    }
-
-    //shifting, useful for movegen
-    public static BitBoard ShiftSouth(BitBoard input)
-    {
-        return input >> 8;
-    }
-    
-    public static BitBoard ShiftNorth(BitBoard input)
-    {
-        return input << 8;
-    }
-
-    public static BitBoard ShiftSouthDouble(BitBoard input)
-    {
-        return input >> 16;
-    }
-
-    public static BitBoard ShiftNorthDouble(BitBoard input)
-    {
-        return input << 16;
-    }
-
-    public static BitBoard ShiftSouthEast(BitBoard input)
-    {
-        return (input & ~FILES[7]) >> 7;
-    }
-
-    public static BitBoard ShiftSouthWest(BitBoard input)
-    {
-        return (input & ~FILES[0]) >> 9;
-    }
-
-    public static BitBoard ShiftNorthEast(BitBoard input)
-    {
-        return (input & ~FILES[7]) << 9;
-    }
-
-    public static BitBoard ShiftNorthWest(BitBoard input)
-    {
-        return (input & ~FILES[0]) << 7;
-    }
-
-    //converters
-    public override string ToString()
-    {
-        var fullString = Convert.ToString((long)boardInt, 2).PadLeft(64, '0');
-        var partArray = new string[8];
-        for (int i = 0; i < 8; i++)
-        {
-            var currentPart = fullString.Substring(i * 8, 8);
-            partArray[i] = currentPart;
-        }
-        return string.Join("\n", partArray);
-    }
-
-    //methods, higher level stuff
-    public int CountActive()
-    {
-        ulong currentInt = boardInt;
-        int count = 0;
-        while (currentInt != 0) {
-            currentInt ^= (ulong)1 << TrailingZeroCount(currentInt);
-            count++;
-        }
-        return count;
-    }
-
-    public static int TrailingZeroCount(ulong bitBoardInt)
-    {
-        uint folded;
-        if (bitBoardInt == 0) return 64;
-        ulong xorDecrement = bitBoardInt ^ (bitBoardInt - 1);
-        folded = (uint)(xorDecrement ^ (xorDecrement >> 32));
-        return LSB_TABLE[(folded * 0x78291ACF) >> 26];
-    }
-
-    public int TrailingZeroCount()
-    {
-        uint folded;
-        if (boardInt == 0) return 64;
-        ulong xorDecrement = boardInt ^ (boardInt - 1);
-        folded = (uint)(xorDecrement ^ (xorDecrement >> 32));
-        return LSB_TABLE[(folded * 0x78291ACF) >> 26];
-    }
-
-    public int[] GetActive()
-    {
-        var output = new int[64] {-1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1};
-        ulong currentInt = boardInt;
-        int arrayIndex = 0;
-        int nextActiveSpace;
-        while (currentInt != 0) {
-            nextActiveSpace = TrailingZeroCount(currentInt);
-            output[arrayIndex] = nextActiveSpace;
-            arrayIndex++;
-            currentInt ^= (ulong)1 << nextActiveSpace;
-        }
-        return output;
-    }
-
-    public int[] GetActiveSlow() // SLOW: There are way faster algos for that
-    {
-        var output = new int[64] {-1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1,
-                                  -1, -1, -1, -1, -1, -1, -1, -1};
-        ulong currentInt = boardInt;
-        int arrayIndex = 0;
-        for (int i = 0; i < 64; i++)
-        {
-
-            if (currentInt == 0) break;
-            if ((currentInt & 1) == 1)
-            {
-                output[arrayIndex] = i;
-                arrayIndex++;
-            }
-            currentInt >>= 1;
-        }
-        return output;
-    }
-}
+using System.Linq;
+using TMPro;
 
 class ZobristHashing
 {
@@ -304,7 +45,7 @@ class ZobristHashing
     public ulong Hash(ChessBoard input, int player, bool[] castling, int epSpace)
     {
         ulong result = 0;
-        foreach (int space in input.occupied.GetActive())
+        foreach (int space in input.Occupied.GetActive())
         {
             if (space == -1) break;
             result ^= LookUpPiece(space, input[space]);
@@ -319,6 +60,20 @@ class ZobristHashing
     }
 }
 
+public struct ChessGameData
+{
+    public int OnTurn;
+    public int EPSpace;
+    public bool[] Castling;
+
+    public ChessGameData(int nextPlayer, int enPassantSpace, bool[] castlingData)
+    {
+        OnTurn = nextPlayer;
+        EPSpace = enPassantSpace;
+        Castling = castlingData;
+    }
+}
+
 public class ChessBoard
 {
     //constants
@@ -330,17 +85,13 @@ public class ChessBoard
         PAWN | WHITE_PIECE, KNIGHT | WHITE_PIECE, BISHOP | WHITE_PIECE, ROOK | WHITE_PIECE, QUEEN | WHITE_PIECE, KING | WHITE_PIECE,
         PAWN | BLACK_PIECE, KNIGHT | BLACK_PIECE, BISHOP | BLACK_PIECE, ROOK | BLACK_PIECE, QUEEN | BLACK_PIECE, KING | BLACK_PIECE
     };
-    public static readonly char[] PIECE_NAMES = new char[] { ' ', 'N', 'B', 'R', 'Q', 'K' };
+    public static readonly char[] PIECE_NAMES = new char[] { 'P', 'N', 'B', 'R', 'Q', 'K' };
     public static readonly char[] FILE_LETTERS = new char[] { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
     public static readonly char[] RANK_NUMBERS = new char[] { '1', '2', '3', '4', '5', '6', '7', '8' };
 
     public static readonly BitBoard WHITE_SPACES = (BitBoard)0b10101010_01010101_10101010_01010101_10101010_01010101_10101010_01010101;
 
-    //core
-    public BitBoard[] piecePositionBoards; //white pawns, white knights, white bishops, white rooks, white queens, white kings, after that same for black
-    public BitBoard occupied; // Every PiecePosBoard added together
-    public BitBoard colorMask; // All black pieces
-
+    
     //castling data 
     //short white, long white, short black, short white
     public static readonly int[] ROOKS_BEFORE_CASTLING = new int[] { 7, 0, 63, 56 };
@@ -348,14 +99,31 @@ public class ChessBoard
     public static readonly int[] ROOKS_AFTER_CASTLING = new int[] { 5, 3, 61, 59 };
     public static readonly int[] KINGS_AFTER_CASTLING = new int[] { 6, 2, 62, 58 };
 
+    //core
 
+    public BitBoard Occupied {get => occupied;} // Every PiecePosBoard added together
+    public BitBoard WhiteOccupied {get => occupied & ~colorMask;}
+    public BitBoard BlackOccupied {get => occupied & colorMask;}
+
+    public int WhiteKingPosition {get =>  piecePositionBoards[5].TrailingZeroCount();}
+    public int BlackKingPosition {get =>  piecePositionBoards[11].TrailingZeroCount();}
+
+    private BitBoard occupied;
+    private BitBoard[] piecePositionBoards; //white pawns, white knights, white bishops, white rooks, white queens, white kings, after that same for black
+    private BitBoard colorMask; // All black pieces
+
+    public ChessGameData GameData;
+    
+    readonly ZobristHashing hashing;
 
     //init
     public ChessBoard()
     {
         piecePositionBoards = new BitBoard[12];
+        hashing = new ZobristHashing((ulong)WHITE_SPACES);
         occupied = new BitBoard();
         colorMask = new BitBoard();
+        GameData = new ChessGameData(WHITE, 0, new bool[] { true, true, true, true });
         for (int i = 0; i < 12; i++)
         {
             piecePositionBoards[i] = new BitBoard();
@@ -363,72 +131,58 @@ public class ChessBoard
     }
 
     //operators and nice stuff
-    public bool Equals(ChessBoard otherBoard)
-    {
-        for (int i = 0; i < 12; i++)
-        {
-            if (piecePositionBoards[i] != otherBoard.piecePositionBoards[i])
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
     public int this[int index]
     {
-        get => GetPieceAtPos(index);
-        set => SetPieceAtPos(index, value);
+        get => GetSpace(index);
+        set => SetSpace(index, value);
     }
 
-    int GetPieceAtPos(int position)
+    int GetSpace(int space)
     {
-        if (!occupied[position])
-        {
-            return 0;
-        }
+        if (!occupied[space]) return 0;
         for (int i = 0; i < 6; i++)
         {
-            if (piecePositionBoards[i][position])
+            if (piecePositionBoards[i][space])
             {
                 return i + 1 + WHITE_PIECE;
             }
-            else if (piecePositionBoards[i + 6][position])
+            else if (piecePositionBoards[i + 6][space])
             {
                 return i + 1 + BLACK_PIECE;
             }
         }
-        throw new IndexOutOfRangeException("Full spaces are not updated correctly or there is a beer bottle on the board.");
+        throw new IndexOutOfRangeException("The board is fucked!");
     }
 
-    void SetPieceAtPos(int position, int piece)
+    void SetSpace(int space, int value)
     {
-        int prevPiece = GetPieceAtPos(position);
-        if (prevPiece != 0) piecePositionBoards[BitBoardIndex(prevPiece)][position] = false;
-        if (piece != 0) piecePositionBoards[BitBoardIndex(piece)][position] = true;
+        if (Occupied[space]) {
+            int prevPiece = GetSpace(space);
+            piecePositionBoards[BitBoardIndex(prevPiece)][space] = false;
+        } 
+        if (value != 0) piecePositionBoards[BitBoardIndex(value)][space] = true;
 
-        occupied[position] = (piece != 0);
-        colorMask[position] = (piece >> 4) == 1;
+        occupied[space] = (value != 0);
+        colorMask[space] = (value >> 4) == 1;
     }
 
-    //hashing, used for position history
-    public ulong QuickHash()
+    public override string ToString()
     {
-        ulong cutoffSum = 0, bitboardSum = 0;
-        for (int i = 0; i < 12; i++)
+        var result = "";
+        for (int space = 0; space < 64; space++)
         {
-            ulong currentBoardInt = (ulong)piecePositionBoards[i];
-            ulong currentCutoff = currentBoardInt & (ulong)0b11;
-            bitboardSum += currentBoardInt >> 2;
-            cutoffSum &= currentCutoff << (2 * i);
+            if (space % 8 == 0 && space != 0) result += "\n";
+            int piece = this[space];
+            if (piece == 0) result += "-";
+            else result += (PieceColor(piece) == WHITE) ? PIECE_NAMES[PieceType(piece) - 1].ToString() : PIECE_NAMES[PieceType(piece) - 1].ToString().ToLower();
         }
-        return bitboardSum + cutoffSum;
+        return result;
     }
 
     //some static getters
     public static int PieceColor(int piece)
     {
-        if (piece == 0) return -1;
+        if (piece == 0) throw new Exception();
         return (piece >> 4);
         //equal to: return ((piece & 0b11000) == whitePiece) ? white: black ;
     }
@@ -446,6 +200,11 @@ public class ChessBoard
     public static int BitBoardIndex(int piece)
     {
         return (piece & 0b111) - 1 + 6 * (piece >> 4);
+    }
+
+    public static int BitBoardIndex(int pieceType, int color)
+    {
+        return pieceType - 1 + 6 * color;
     }
 
     public static int SpaceColor(int space)
@@ -502,45 +261,14 @@ public class ChessBoard
     }
 
     //non static getters, mostly used for eval
-    public BitBoard WhiteOccupied() 
-    {
-        return occupied & ~colorMask;
-    }
-
-    public BitBoard BlackOccupied()
-    {
-        return occupied & colorMask;
-    }
-
     public BitBoard ColorOccupied(int color)
     {
-        return (color == WHITE) ? WhiteOccupied() : BlackOccupied();
+        return (color == WHITE) ? WhiteOccupied : BlackOccupied;
     }
 
     public int PieceCount(int piece)
     {
-        int index = BitBoardIndex(piece);
-        return piecePositionBoards[index].CountActive();
-    }
-
-    public int WhitePieceCount()
-    {
-        BitBoard whitePieces = new BitBoard();
-        for (int i = 0; i < 6; i++)
-        {
-            whitePieces += piecePositionBoards[i];
-        }
-        return whitePieces.CountActive();
-    }
-
-    public int BlackPieceCount()
-    {
-        BitBoard blackPieces = new BitBoard();
-        for (int i = 6; i < 12; i++)
-        {
-            blackPieces += piecePositionBoards[i];
-        }
-        return blackPieces.CountActive();
+        return piecePositionBoards[BitBoardIndex(piece)].CountActive();
     }
 
     //faster methods for board acessing
@@ -549,22 +277,50 @@ public class ChessBoard
         return piecePositionBoards[BitBoardIndex(piece)][space];
     }
 
-    public int[] FindPieces(int piece) //returns list of spaces where the piece is
+    public bool ContainsBitBoardIndex(int space, int index)
+    {
+        return piecePositionBoards[index][space];
+    }
+
+    public BitBoard GetPieceBitBoard(int piece)
+    {
+        return piecePositionBoards[BitBoardIndex(piece)];
+    }
+
+    public BitBoard GetPieceBitBoard(int pieceType, int color)
+    {
+        return piecePositionBoards[BitBoardIndex(pieceType, color)];
+    }
+
+    public List<int> FindPieces(int piece) //returns list of spaces where the piece is
     {
         int index = BitBoardIndex(piece);
         return piecePositionBoards[index].GetActive();
     }
 
-    public int WhiteKingPosition() {
-        return piecePositionBoards[BitBoardIndex(WHITE_PIECE | KING)].TrailingZeroCount();
-    }
-    public int BlackKingPosition() {
-        return piecePositionBoards[BitBoardIndex(BLACK_PIECE | KING)].TrailingZeroCount();
+    public List<int> FindPieces(int pieceType, int color) //returns list of spaces where the piece is
+    {
+        int index = BitBoardIndex(pieceType, color);
+        return piecePositionBoards[index].GetActive();
     }
 
-    public int[] FindPiecesOfColor(int color)
+    public int KingPosition(int color) {
+        return (color == WHITE) ? WhiteKingPosition : BlackKingPosition;	
+    }
+
+    public List<int> FindPiecesOfColor(int color)
     {
         return ColorOccupied(color).GetActive();
+    }
+
+    public int CountDoublePawns(int color)
+    {
+        int result = 0;
+        foreach (BitBoard file in BitBoard.FILES)
+        {
+            if ((piecePositionBoards[6 * color] & file).CountActive() > 1) result += 1;
+        }
+        return result;
     }
 
     //methods to make moving and undoing faster 
@@ -619,4 +375,166 @@ public class ChessBoard
         colorMask[(-8 + 16 * color) + pos] = false;
         return (-8 + 16 * color) + pos;
     }
+
+    public UndoMoveData MovePiece(int start, int end)
+    {
+        //variables
+        int piece = this[start];
+        int color = PieceColor(piece);
+        int type = PieceType(piece);
+        int captured = this[end];
+        bool capture = captured != 0;
+        int shortCastlingIndex = color * 2; // 0 for white, 2 for black
+        int longCastlingIndex = color * 2 + 1; // 1 for white, 3 for black
+        int nextEPSpace = 0;
+
+        //for undoing
+        int castlingIndex = -1;
+        bool[] castlingBefore = (bool[])GameData.Castling.Clone();
+        int epSpaceBefore = GameData.EPSpace;
+        bool promotion = false;
+
+        if (PieceType(captured) == KING) UnityEngine.Debug.LogWarning(this.ToString());
+
+
+        //castling + castling prevention when king moved
+        if (type == KING)
+        {
+            int deltaX = end - start;
+            if (!capture && (deltaX == 2 || deltaX == -2)) //keeps castling code from running all the time, castling is never a capture
+            {
+                int castlingRook = PieceInt(ROOK, color);
+                if (deltaX == 2) {
+                    MovePieceToEmptySpace(ROOKS_BEFORE_CASTLING[shortCastlingIndex], ROOKS_AFTER_CASTLING[shortCastlingIndex], castlingRook);
+                    castlingIndex = shortCastlingIndex;
+                } //short
+                else if (deltaX == -2) {
+                    MovePieceToEmptySpace(ROOKS_BEFORE_CASTLING[longCastlingIndex], ROOKS_AFTER_CASTLING[longCastlingIndex], castlingRook);
+                    castlingIndex = longCastlingIndex;
+                } //long
+            }
+            // no castling after moving kings
+            GameData.Castling[shortCastlingIndex] = false;
+            GameData.Castling[longCastlingIndex] = false;
+        }
+
+        //castling prevention after rook moved
+        else if (type == ROOK)
+        {
+            if (SpaceX(start) == 7) GameData.Castling[shortCastlingIndex] = false;
+            else if (SpaceX(start) == 0) GameData.Castling[longCastlingIndex] = false;
+        }
+
+        //prventing castling when rook needed for it was taken
+        if (PieceType(captured) == ROOK && (end == 7 || end == 0 || end == 63 || end == 56))
+        {
+            if (PieceColor(captured) == WHITE)
+            {
+                GameData.Castling[shortCastlingIndex] = (!(end == 7)) && GameData.Castling[shortCastlingIndex];
+                GameData.Castling[longCastlingIndex] = (!(end == 0)) && GameData.Castling[longCastlingIndex];
+            }
+            else if (PieceColor(captured) == BLACK) // ugly repetition
+            {
+                GameData.Castling[shortCastlingIndex] = (!(end == 63)) && GameData.Castling[shortCastlingIndex];
+                GameData.Castling[longCastlingIndex] = (!(end == 56)) && GameData.Castling[longCastlingIndex];
+            }
+        }
+
+        //en passant execution and space setting
+        if (type == PAWN)
+        {
+            if (end == GameData.EPSpace && GameData.EPSpace != 0) TakeEPPawn(end, color);
+            if (!capture && Math.Abs(SpaceY(start) - SpaceY(end)) == 2) nextEPSpace = (color == BLACK) ? end + 8 : end - 8;
+        }
+
+        // making the actual move
+        if (!capture) MovePieceToEmptySpace(start, end, piece);
+        else MovePieceToFullSpace(start, end, piece, captured);
+
+        // turning pawns to queens on promotion
+        if ((SpaceY(end) == 7 || SpaceY(end) == 0) && type == PAWN) // pawn of own color never will go backwards
+        {
+            TurnPawnToQueen(end, color);
+            promotion = true;
+        }
+        
+        GameData.EPSpace = nextEPSpace;
+        GameData.OnTurn ^= 1;
+
+        return new UndoMoveData(start, end, piece, captured, castlingIndex, castlingBefore, epSpaceBefore, promotion);
+    }
+
+    public void UndoMovePiece(UndoMoveData undoData)
+    {
+        int movedPieceColor = PieceColor(undoData.piece);
+        if (undoData.promotion) TurnQueenToPawn(undoData.end, movedPieceColor);
+        MovePieceToEmptySpace(undoData.end, undoData.start, undoData.piece);
+        GameData.Castling = undoData.castlingBefore;
+        GameData.EPSpace = undoData.epSpaceBefore;
+        if (undoData.captured != 0) CreatePiece(undoData.end, undoData.captured);
+        if (undoData.end == undoData.epSpaceBefore && undoData.end != 0)
+        { // move was en passant
+            int pawnColor = (movedPieceColor == WHITE) ? BLACK_PIECE : WHITE_PIECE;
+            int epOffset = (pawnColor == BLACK_PIECE) ? -8 : 8;
+            CreatePiece(undoData.end + epOffset, PAWN | pawnColor);
+        }
+        if (undoData.castlingIndex != -1)
+        { // move was castling
+            int rookColor = (movedPieceColor == WHITE) ? WHITE_PIECE : BLACK_PIECE;
+            MovePieceToEmptySpace(ROOKS_AFTER_CASTLING[undoData.castlingIndex], ROOKS_BEFORE_CASTLING[undoData.castlingIndex], ROOK | rookColor);
+        }
+        GameData.OnTurn ^= 1;
+    }
+
+    public static ChessBoard LoadFEN(string fenNotation)
+    {
+        var board = FENHandler.ReadFEN(fenNotation);
+        board.GameData = FENHandler.GameDataFromFEN(fenNotation);
+        return board;
+    }
+
+    public ulong ZobristHash()
+    {
+        return hashing.Hash(this, GameData.OnTurn, GameData.Castling, GameData.EPSpace);
+    }
 }
+
+
+
+/*
+struct Move
+{
+    private uint moveInt;
+    public int Start {get => GetBlock(0);}
+    public int End {get => GetBlock(6);}
+    public int MovedPiece {get => GetBlock(12);}
+    public int TakenPiece {get => GetBlock(18);}
+
+    public bool Castling {get => GetBool(25);}
+    public bool Promotion {get => GetBool(26);}
+    public bool EP {get => GetBool(27);}
+
+    public Move(int start, int end, int movedPiece, int takenPiece, bool castling = false, bool promotion = false, bool ep = false)
+    {
+        moveInt = 0;
+        moveInt |= (uint)start;
+        moveInt |= (uint)end << 6;
+        moveInt |= (uint)movedPiece << 12;
+        moveInt |= (uint)takenPiece << 18;
+        moveInt |= (uint)(castling ? (1 << 25) : 0);
+        moveInt |= (uint)(promotion ? (1 << 26) : 0);
+        moveInt |= (uint)(ep ? (1 << 27) : 0);
+    } 
+
+    private int GetBlock(int startIndex) 
+    {
+        return (int)((moveInt >> startIndex) & 0b111111);
+    }
+
+    private bool GetBool(int index)
+    {
+        if (((moveInt >> index) & 1) == 1) return true;
+        return false;
+    }
+}
+*/

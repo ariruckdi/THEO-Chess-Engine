@@ -13,7 +13,6 @@ public class GameManagerEditor : Editor
         if (GUILayout.Button("Generate Board") && !self.boardExists)
         {
             MoveGenerator testBoard = new MoveGenerator();
-            self.moveGenerator = testBoard;
             self.boardCreation.GenerateBoard();
             self.boardExists = true;
         }
@@ -21,7 +20,6 @@ public class GameManagerEditor : Editor
         {
             self.boardCreation.RemoveBoard();
             self.boardExists = false;
-            self.moveGenerator = null;
         }
         if (GUILayout.Button("Starting Position") && self.boardExists)
         {

@@ -7,8 +7,8 @@ using static ChessBoard;
 
 public class FENHandler
 {
-    public static readonly char[] fenPieceLetters = new char[] { 'P', 'N', 'B', 'R', 'Q', 'K' };
-    public static Dictionary<char, int> fenParsing = new Dictionary<char, int>
+    public static readonly char[] FEN_PIECE_LETTERS = new char[] { 'P', 'N', 'B', 'R', 'Q', 'K' };
+    public static Dictionary<char, int> FENParsing = new Dictionary<char, int>
     {
         {'P', PAWN | WHITE_PIECE },
         {'N', KNIGHT | WHITE_PIECE },
@@ -48,7 +48,7 @@ public class FENHandler
                 }
                 else
                 {
-                    pieceToPlace = fenParsing[piece];
+                    pieceToPlace = FENParsing[piece];
                     output[8 * (7 - y) + currentX] = pieceToPlace;
                     currentX++;
                 }
@@ -62,23 +62,23 @@ public class FENHandler
         //TODO support for en passant space loading and error handling!
         var output = new ChessGameData(WHITE, 0, new bool[4]);
         string[] fenGroups = fenNotation.Split(' ');
-        output.playerOnTurn = (fenGroups[1] == "w") ? WHITE : BLACK;
+        output.OnTurn = (fenGroups[1] == "w") ? WHITE : BLACK;
         string castlingStr = fenGroups[2];
         foreach (char currentLetter in castlingStr)
         {
             switch (currentLetter)
             {
                 case 'K':
-                    output.castling[MoveGenerator.SHORT_CASTLING_WHITE] = true;
+                    output.Castling[MoveGenerator.SHORT_CASTLING_WHITE] = true;
                     break;
                 case 'Q':
-                    output.castling[MoveGenerator.LONG_CASTLING_WHITE] = true;
+                    output.Castling[MoveGenerator.LONG_CASTLING_WHITE] = true;
                     break;
                 case 'k':
-                    output.castling[MoveGenerator.SHORT_CASTLING_BLACK] = true;
+                    output.Castling[MoveGenerator.SHORT_CASTLING_BLACK] = true;
                     break;
                 case 'q':
-                    output.castling[MoveGenerator.LONG_CASTLING_BLACK] = true;
+                    output.Castling[MoveGenerator.LONG_CASTLING_BLACK] = true;
                     break;
             }
         }

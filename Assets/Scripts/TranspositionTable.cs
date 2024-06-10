@@ -7,11 +7,11 @@ struct Entry
 {
     public readonly ulong key;
     public readonly int value;
-    public readonly EngineMove move;
+    public readonly Move move;
     public readonly byte depth;
     public readonly byte nodeType;
 
-    public Entry(ulong key, int value, EngineMove move, byte depth, byte nodeType)
+    public Entry(ulong key, int value, Move move, byte depth, byte nodeType)
     {
         this.key = key;
         this.value = value;
@@ -40,16 +40,16 @@ public class TranspositionTable
         return zobristHash % size;
     }
 
-    public void StoreEval(int depth, int eval, int evalType, EngineMove bestMove)
+    public void StoreEval(int depth, int eval, int evalType, Move bestMove)
     {
-        ulong currentHash = moveGenerator.ZobristHash();
+        ulong currentHash = moveGenerator.Board.ZobristHash();
         Entry newEntry = new Entry(currentHash, eval, bestMove, (byte)depth, (byte)evalType);
         table[Index(currentHash)] = newEntry;
     }
 
     public int LookupEval(int depth, int alpha, int beta)
     {
-        ulong currentHash = moveGenerator.ZobristHash();
+        ulong currentHash = moveGenerator.Board.ZobristHash();
         Entry entry = table[Index(currentHash)];
 
         if (entry.key == currentHash)
@@ -82,9 +82,9 @@ public class TranspositionTable
         }
     }
 
-    public EngineMove LookUpMove()
+    public Move LookUpMove()
     {
-        ulong currentHash = moveGenerator.ZobristHash();
+        ulong currentHash = moveGenerator.Board.ZobristHash();
         Entry entry = table[Index(currentHash)];
         return entry.move;
     }
